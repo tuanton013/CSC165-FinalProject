@@ -49,10 +49,10 @@ public class GameServerUDP extends GameConnectionServer<UUID>
 		// ------------------------------------------------------------------
 		if (msgTokens[0].compareTo("create") == 0)
 		{
-			if (msgTokens.length >= 8)
+			if (msgTokens.length >= 7)
 			{	UUID clientID = UUID.fromString(msgTokens[1]);
 				String[] details = { msgTokens[2], msgTokens[3], msgTokens[4],
-				                     msgTokens[5], msgTokens[6], msgTokens[7] };
+				                     msgTokens[5], msgTokens[6] };
 				sendCreateMessages(clientID, details);
 				sendWantsDetailsMessages(clientID);
 			}
@@ -84,11 +84,11 @@ public class GameServerUDP extends GameConnectionServer<UUID>
 		// ------------------------------------------------------------------
 		if (msgTokens[0].compareTo("dsfr") == 0)
 		{
-			if (msgTokens.length >= 9)
+			if (msgTokens.length >= 8)
 			{	UUID senderID = UUID.fromString(msgTokens[1]);
 				UUID remoteID = UUID.fromString(msgTokens[2]);
 				String[] details = { msgTokens[3], msgTokens[4], msgTokens[5],
-				                     msgTokens[6], msgTokens[7], msgTokens[8] };
+				                     msgTokens[6], msgTokens[7] };
 				sendDetailsForMessage(senderID, remoteID, details);
 			}
 		}

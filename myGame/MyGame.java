@@ -203,7 +203,7 @@ public class MyGame extends VariableFrameRateGame
 				"Time = " + Math.round((float) elapsTime),
 				new Vector3f(1, 0, 0), 15, 15);
 
-		// Poll input devices so JInput-based actions (FwdAction, etc.) fire
+		// Poll input devices so MoveAction etc. fire
 		engine.getInputManager().update((float) elapsTime);
 
 		processNetworking((float) elapsTime);
@@ -244,8 +244,13 @@ public class MyGame extends VariableFrameRateGame
 	{	InputManager im = engine.getInputManager();
 		im.associateActionWithAllKeyboards(
 				Key.W,
-				new FwdAction(this, protClient),
-				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_AND_RELEASE);
+				new MoveAction(this, protClient, +1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		im.associateActionWithAllKeyboards(
+				Key.S,
+				new MoveAction(this, protClient, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
 	}
 
 	@Override
