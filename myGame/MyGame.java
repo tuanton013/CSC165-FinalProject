@@ -2,6 +2,7 @@ package myGame;
 
 import tage.*;
 import tage.shapes.*;
+import tage.shapes.AnimatedShape.EndType;
 import tage.input.*;
 import tage.input.action.*;
 import tage.networking.IGameConnection.ProtocolType;
@@ -43,12 +44,15 @@ public class MyGame extends VariableFrameRateGame
 	private Light        light1;
 
 	// Available assets (add more as you expand the project)
-	private static final String[] MODEL_NAMES   = { "dolphinHighPoly.obj" };
-	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg" };
+	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj" };
+	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg", "human.png" };
 
 	// Shared asset caches so ghosts re-use already-loaded resources
 	private Map<String, ObjShape>     shapeCache   = new HashMap<>();
 	private Map<String, TextureImage> textureCache = new HashMap<>();
+
+	// Animated shape for the HumanFinal model
+	private AnimatedShape humanShape;
 
 	// The avatar choices made at startup
 	private String avatarModelName;
@@ -146,9 +150,15 @@ public class MyGame extends VariableFrameRateGame
 	{	// Show selection dialog first so we know which model to highlight
 		showAvatarSelectionDialog();
 
-		// Pre-load every available model into the cache
+		// Load the animated HumanFinal model
+		humanShape = new AnimatedShape("HumanFinal.rkm", "HumanFinal.rks");
+		humanShape.loadAnimation("WALK", "HumanFinal.rka");
+		shapeCache.put("HumanFinal", humanShape);
+
+		// Pre-load every other OBJ model into the cache
 		for (String name : MODEL_NAMES)
-			shapeCache.put(name, new ImportedModel(name));
+			if (!name.equals("HumanFinal"))
+				shapeCache.put(name, new ImportedModel(name));
 	}
 
 	@Override
@@ -163,8 +173,16 @@ public class MyGame extends VariableFrameRateGame
 			GameObject.root(),
 			shapeCache.get(avatarModelName),
 			textureCache.get(avatarTextureName));
-		avatar.setLocalTranslation((new Matrix4f()).translation(0, 0, 0));
-		avatar.setLocalScale((new Matrix4f()).scaling(3.0f));
+		// HumanFinal is large by default – scale it down so the full figure fits in view
+		if ("HumanFinal".equals(avatarModelName))
+		{	// scale down and shift up so feet sit on the ground plane
+			avatar.setLocalScale((new Matrix4f()).scaling(0.01f));
+			avatar.setLocalTranslation((new Matrix4f()).translation(0, 0, 0));
+		}
+		else
+		{	avatar.setLocalTranslation((new Matrix4f()).translation(0, 0, 0));
+			avatar.setLocalScale((new Matrix4f()).scaling(3.0f));
+		}
 	}
 
 	@Override
@@ -182,8 +200,9 @@ public class MyGame extends VariableFrameRateGame
 		elapsTime     = 0.0;
 
 		(engine.getRenderSystem()).setWindowDimensions(1900, 1000);
+		// Camera: back enough and elevated slightly so the full human is visible
 		(engine.getRenderSystem().getViewport("MAIN").getCamera())
-				.setLocation(new Vector3f(0, 0, 5));
+				.setLocation(new Vector3f(0, 2, 10));
 
 		// Networking (only when a server address was supplied)
 		if (serverAddress != null)
@@ -205,6 +224,10 @@ public class MyGame extends VariableFrameRateGame
 
 		// Poll input devices so MoveAction etc. fire
 		engine.getInputManager().update((float) elapsTime);
+
+		// Update skeleton animation if the HumanFinal model is the active avatar
+		if (humanShape != null && "HumanFinal".equals(avatarModelName))
+			humanShape.updateAnimation();
 
 		processNetworking((float) elapsTime);
 	}
@@ -256,7 +279,17 @@ public class MyGame extends VariableFrameRateGame
 	@Override
 	public void keyPressed(KeyEvent e)
 	{	switch (e.getKeyCode())
-		{	case KeyEvent.VK_1:
+		{	case KeyEvent.VK_W:
+				if (humanShape != null && "HumanFinal".equals(avatarModelName))
+				{	humanShape.stopAnimation();
+					humanShape.playAnimation("WALK", 0.15f, EndType.LOOP, 0);
+				}
+				break;
+			case KeyEvent.VK_S:
+				if (humanShape != null && "HumanFinal".equals(avatarModelName))
+					humanShape.stopAnimation();
+				break;
+			case KeyEvent.VK_1:
 				paused = !paused;
 				break;
 			case KeyEvent.VK_2:
