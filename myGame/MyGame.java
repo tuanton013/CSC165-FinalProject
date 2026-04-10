@@ -38,10 +38,10 @@ public class MyGame extends VariableFrameRateGame
 
 	private boolean paused = false;
 	private double  lastFrameTime, currFrameTime, elapsTime;
-
 	private GameObject   avatar;
 	private Light        light1;
-
+	
+	private int          fluffyClouds;
 	// Available assets (add more as you expand the project)
 	private static final String[] MODEL_NAMES   = { "dolphinHighPoly.obj" };
 	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg" };
@@ -157,6 +157,14 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.put(name, new TextureImage(name));
 	}
 
+	@Override
+	public void loadSkyBoxes()
+	{	fluffyClouds = (engine.getSceneGraph()).loadCubeMap("fluffyClouds");
+		(engine.getSceneGraph()).setActiveSkyBoxTexture(fluffyClouds);
+		(engine.getSceneGraph()).setSkyBoxEnabled(true);
+	}
+
+	
 	@Override
 	public void buildObjects()
 	{	avatar = new GameObject(
