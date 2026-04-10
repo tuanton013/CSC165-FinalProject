@@ -41,7 +41,21 @@ public class MyGame extends VariableFrameRateGame
 	private double  lastFrameTime, currFrameTime, elapsTime;
 
 	private GameObject   avatar;
+	private GameObject   terrain;
+	private GameObject   mazeVisible;   // top + wall faces  -> maze.png texture
+	private GameObject   mazeHidden;    // bottom faces      -> no texture
+	private TerrainPlane terrainShape;
+	private ObjShape     mazeVisibleShape;
+	private ObjShape     mazeHiddenShape;
 	private Light        light1;
+
+	// Maze geometry constants (from maze.obj bounding box)
+	// The maze is shifted +9 in Z so it sits in front of the camera.
+	private static final float MAZE_CENTER_X  =  0.16f;   // (xMin+xMax)/2
+	private static final float MAZE_FLOOR_Y   =  0.12f;   // lift so floor sits at y=0
+	private static final float MAZE_OFFSET_Z  =  9.0f;    // world-space Z shift applied to maze
+	private static final float MAZE_START_Z   =  9.80f;   // 0.80 + MAZE_OFFSET_Z
+	private static final float MAZE_CENTER_Z  = -0.07f;   // -9.07 + MAZE_OFFSET_Z
 
 	// Available assets (add more as you expand the project)
 	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj" };
@@ -159,6 +173,13 @@ public class MyGame extends VariableFrameRateGame
 		for (String name : MODEL_NAMES)
 			if (!name.equals("HumanFinal"))
 				shapeCache.put(name, new ImportedModel(name));
+
+		// Terrain shape (100x100 vertex grid)
+		terrainShape = new TerrainPlane(100);
+
+		// Maze split meshes (visible = tops+walls, hidden = undersides)
+		mazeVisibleShape = new ImportedModel("maze2_visible.obj");
+		mazeHiddenShape  = new ImportedModel("maze2_hidden.obj");
 	}
 
 	@Override
@@ -169,20 +190,43 @@ public class MyGame extends VariableFrameRateGame
 
 	@Override
 	public void buildObjects()
-	{	avatar = new GameObject(
+	{	// Terrain – flat arena ground, scaled to 200x200 world units
+		terrain = new GameObject(GameObject.root(), terrainShape, textureCache.get("ice.jpg"));
+		terrain.setLocalScale(new Matrix4f().scaling(100.0f, 1.0f, 100.0f));
+		terrain.setLocalTranslation(new Matrix4f().translation(0f, 0f, 0f));
+		terrain.setIsTerrain(true);
+
+		// Maze visible faces (tops + walls) – brick texture (swap to maze.png once UV-painted)
+		mazeVisible = new GameObject(GameObject.root(), mazeVisibleShape, textureCache.get("brick1.jpg"));
+		mazeVisible.setLocalTranslation(new Matrix4f().translation(0f, MAZE_FLOOR_Y, MAZE_OFFSET_Z));
+		mazeVisible.setLocalScale(new Matrix4f().scaling(1.0f));
+
+		// Maze hidden faces (undersides) – plain material, closes the geometry
+		mazeHidden = new GameObject(GameObject.root(), mazeHiddenShape);
+		mazeHidden.setLocalTranslation(new Matrix4f().translation(0f, MAZE_FLOOR_Y, MAZE_OFFSET_Z));
+		mazeHidden.setLocalScale(new Matrix4f().scaling(1.0f));
+
+		// Avatar – placed at the mid-point of the maze start edge
+		avatar = new GameObject(
 			GameObject.root(),
 			shapeCache.get(avatarModelName),
 			textureCache.get(avatarTextureName));
-		// HumanFinal is large by default – scale it down so the full figure fits in view
 		if ("HumanFinal".equals(avatarModelName))
-		{	// scale down and shift up so feet sit on the ground plane
-			avatar.setLocalScale((new Matrix4f()).scaling(0.01f));
-			avatar.setLocalTranslation((new Matrix4f()).translation(0, 0, 0));
+		{	avatar.setLocalScale(new Matrix4f().scaling(0.01f));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
 		}
 		else
-		{	avatar.setLocalTranslation((new Matrix4f()).translation(0, 0, 0));
-			avatar.setLocalScale((new Matrix4f()).scaling(3.0f));
+		{	avatar.setLocalScale(new Matrix4f().scaling(0.2f));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
 		}
+	}
+
+	@Override
+	public void loadSkyBoxes()
+	{	tage.SceneGraph sg = engine.getSceneGraph();
+		int skyTex = sg.loadCubeMap("fluffyClouds");
+		sg.setActiveSkyBoxTexture(skyTex);
+		sg.setSkyBoxEnabled(true);
 	}
 
 	@Override
@@ -200,9 +244,11 @@ public class MyGame extends VariableFrameRateGame
 		elapsTime     = 0.0;
 
 		(engine.getRenderSystem()).setWindowDimensions(1900, 1000);
-		// Camera: back enough and elevated slightly so the full human is visible
-		(engine.getRenderSystem().getViewport("MAIN").getCamera())
-				.setLocation(new Vector3f(0, 2, 10));
+		// Camera: elevated above the start edge, looking at the full maze center
+		// Maze after shift: Z from 9.8 (start) to -10.1 (end), center = -0.07
+		tage.Camera cam = engine.getRenderSystem().getViewport("MAIN").getCamera();
+		cam.setLocation(new Vector3f(MAZE_CENTER_X, 14f, 13f));
+		cam.lookAt(new Vector3f(MAZE_CENTER_X, 0f, MAZE_CENTER_Z));
 
 		// Networking (only when a server address was supplied)
 		if (serverAddress != null)
