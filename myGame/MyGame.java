@@ -56,6 +56,11 @@ public class MyGame extends VariableFrameRateGame
 	private static final float MAZE_OFFSET_Z  =  9.0f;    // world-space Z shift applied to maze
 	private static final float MAZE_START_Z   =  9.80f;   // 0.80 + MAZE_OFFSET_Z
 	private static final float MAZE_CENTER_Z  = -0.07f;   // -9.07 + MAZE_OFFSET_Z
+	// Maze exit: the opening at the far (negative-Z) end of the maze
+	private static final float MAZE_EXIT_Z    = -9.5f;    // trigger zone just before end wall
+
+	// Indoor / outdoor state
+	private boolean isOutdoor = false;
 
 	// Available assets (add more as you expand the project)
 	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj" };
@@ -264,9 +269,10 @@ public class MyGame extends VariableFrameRateGame
 		currFrameTime = System.currentTimeMillis();
 		if (!paused) elapsTime += (currFrameTime - lastFrameTime) / 1000.0;
 
-		(engine.getHUDmanager()).setHUD1(
-				"Time = " + Math.round((float) elapsTime),
-				new Vector3f(1, 0, 0), 15, 15);
+		if (!isOutdoor)
+			(engine.getHUDmanager()).setHUD1(
+					"Time = " + Math.round((float) elapsTime) + "s  |  Reach the far end to escape!",
+					new Vector3f(1, 0, 0), 15, 15);
 
 		// Poll input devices so MoveAction etc. fire
 		engine.getInputManager().update((float) elapsTime);
@@ -275,12 +281,58 @@ public class MyGame extends VariableFrameRateGame
 		if (humanShape != null && "HumanFinal".equals(avatarModelName))
 			humanShape.updateAnimation();
 
+		// Detect when the player reaches the maze exit and step outside
+		if (!isOutdoor && avatar.getWorldLocation().z() < MAZE_EXIT_Z)
+			transitionToOutdoor();
+
+		// Follow-camera for outdoor exploration
+		if (isOutdoor)
+			updateOutdoorCamera();
+
 		processNetworking((float) elapsTime);
 	}
 
 	// ------------------------------------------------------------------
 	// Networking
 	// ------------------------------------------------------------------
+
+	// ------------------------------------------------------------------
+	// Outdoor transition
+	// ------------------------------------------------------------------
+
+	/** Called once when the avatar crosses the maze exit threshold. */
+	private void transitionToOutdoor()
+	{	isOutdoor = true;
+
+		// Hide the maze geometry so only sky + terrain are visible
+		mazeVisible.getRenderStates().disableRendering();
+		mazeHidden.getRenderStates().disableRendering();
+
+		// Snap the avatar to ground level on the terrain side of the exit
+		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, 0f, MAZE_EXIT_Z - 2f));
+
+		(engine.getHUDmanager()).setHUD1(
+			"You escaped! Explore outside (W/S = move, A/D = turn)",
+			new Vector3f(0, 1, 0), 15, 15);
+
+		System.out.println("[MyGame] Player exited the maze – outdoor mode active.");
+	}
+
+	/** Third-person follow camera used during outdoor exploration. */
+	private void updateOutdoorCamera()
+	{	tage.Camera cam = engine.getRenderSystem().getViewport("MAIN").getCamera();
+		Vector3f avatarPos = avatar.getWorldLocation();
+
+		// 6 units behind the avatar's facing direction, 3 units above
+		Vector4f back = new Vector4f(0f, 0f, 6f, 1f);
+		back.mul(avatar.getWorldRotation());
+		Vector3f camPos = new Vector3f(
+				avatarPos.x() + back.x(),
+				avatarPos.y() + back.y() + 3f,
+				avatarPos.z() + back.z());
+		cam.setLocation(camPos);
+		cam.lookAt(new Vector3f(avatarPos.x(), avatarPos.y() + 1f, avatarPos.z()));
+	}
 
 	private void setupNetworking()
 	{	isClientConnected = false;
@@ -319,6 +371,17 @@ public class MyGame extends VariableFrameRateGame
 		im.associateActionWithAllKeyboards(
 				Key.S,
 				new MoveAction(this, protClient, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		// A/D: rotate avatar left/right (used for outdoor exploration)
+		im.associateActionWithAllKeyboards(
+				Key.A,
+				new TurnAction(this, +1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		im.associateActionWithAllKeyboards(
+				Key.D,
+				new TurnAction(this, -1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
 	}
 
