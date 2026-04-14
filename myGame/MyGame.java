@@ -6,6 +6,7 @@ import tage.shapes.AnimatedShape.EndType;
 import tage.input.*;
 import tage.input.action.*;
 import tage.networking.IGameConnection.ProtocolType;
+
 import net.java.games.input.Component.Identifier.Key;
 
 import java.lang.Math;
@@ -63,8 +64,8 @@ public class MyGame extends VariableFrameRateGame
 	private boolean isOutdoor = false;
 
 	// Available assets (add more as you expand the project)
-	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj" };
-	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg", "human.png" };
+	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj", "kir.obj", "newHuman.obj" };
+	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg", "human.png", "new_character_texture.png" };
 
 	// Shared asset caches so ghosts re-use already-loaded resources
 	private Map<String, ObjShape>     shapeCache   = new HashMap<>();
@@ -191,15 +192,20 @@ public class MyGame extends VariableFrameRateGame
 	public void loadTextures()
 	{	for (String name : TEXTURE_NAMES)
 			textureCache.put(name, new TextureImage(name));
+			textureCache.put("gridTerrain.jpg",   new TextureImage("gridTerrain.jpg"));
+			textureCache.put("trainHeightMap.jpg", new TextureImage("trainHeightMap.jpg"));
 	}
 
 	@Override
 	public void buildObjects()
-	{	// Terrain – flat arena ground, scaled to 200x200 world units
-		terrain = new GameObject(GameObject.root(), terrainShape, textureCache.get("ice.jpg"));
-		terrain.setLocalScale(new Matrix4f().scaling(100.0f, 1.0f, 100.0f));
+	{	// Terrain – Tron grid ground with subtle height variation
+		terrain = new GameObject(GameObject.root(), terrainShape, textureCache.get("gridTerrain.jpg"));
+		terrain.setLocalScale(new Matrix4f().scaling(100.0f, 30.0f, 100.0f));
 		terrain.setLocalTranslation(new Matrix4f().translation(0f, 0f, 0f));
+		terrain.setHeightMap(textureCache.get("trainHeightMap.jpg"));
 		terrain.setIsTerrain(true);
+		terrain.getRenderStates().setTiling(1);
+		terrain.getRenderStates().setTileFactor(10);
 
 		// Maze visible faces (tops + walls) – brick texture (swap to maze.png once UV-painted)
 		mazeVisible = new GameObject(GameObject.root(), mazeVisibleShape, textureCache.get("brick1.jpg"));
@@ -219,6 +225,13 @@ public class MyGame extends VariableFrameRateGame
 		if ("HumanFinal".equals(avatarModelName))
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.01f));
 			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+		}
+		else if ("newHuman.obj".equals(avatarModelName))
+		{	// newHuman.obj is ~6.71 units tall in Blender space (Y: -4.49 to +2.22).
+			// At scale 0.2 the feet sit 0.90 units below Y=0, so we lift by 4.49*0.2 = 0.90.
+			float s = 0.2f;
+			avatar.setLocalScale(new Matrix4f().scaling(s));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 4.49f * s, MAZE_START_Z));
 		}
 		else
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.2f));
@@ -285,6 +298,13 @@ public class MyGame extends VariableFrameRateGame
 		if (!isOutdoor && avatar.getWorldLocation().z() < MAZE_EXIT_Z)
 			transitionToOutdoor();
 
+		// Terrain-following: keep avatar on the heightmap surface when outdoors
+		if (isOutdoor)
+		{	Vector3f loc = avatar.getWorldLocation();
+			float terrainY = terrain.getHeight(loc.x(), loc.z());
+			avatar.setLocalLocation(new Vector3f(loc.x(), terrainY, loc.z()));
+		}
+
 		// Follow-camera for outdoor exploration
 		if (isOutdoor)
 			updateOutdoorCamera();
@@ -308,8 +328,9 @@ public class MyGame extends VariableFrameRateGame
 		mazeVisible.getRenderStates().disableRendering();
 		mazeHidden.getRenderStates().disableRendering();
 
-		// Snap the avatar to ground level on the terrain side of the exit
-		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, 0f, MAZE_EXIT_Z - 2f));
+		// Snap the avatar to the terrain surface just outside the exit
+		float snapZ = MAZE_EXIT_Z - 2f;
+		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, terrain.getHeight(MAZE_CENTER_X, snapZ), snapZ));
 
 		(engine.getHUDmanager()).setHUD1(
 			"You escaped! Explore outside (W/S = move, A/D = turn)",
