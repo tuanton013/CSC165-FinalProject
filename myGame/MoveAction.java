@@ -37,17 +37,6 @@ public class MoveAction extends AbstractInputAction
 				.add(moveDir.x(), moveDir.y(), moveDir.z());
 		av.setLocalLocation(newPosition);
 
-		// If any point of the avatar's footprint hits a non-walkable cell, revert.
-		// The four offset samples at RADIUS create a buffer so the character
-		// visually stops before blending into a wall.
-		final float RADIUS = 0.18f;
-		if (!game.isOnMazePath(newPosition.x(),          newPosition.z())
-		 || !game.isOnMazePath(newPosition.x() + RADIUS, newPosition.z())
-		 || !game.isOnMazePath(newPosition.x() - RADIUS, newPosition.z())
-		 || !game.isOnMazePath(newPosition.x(),          newPosition.z() + RADIUS)
-		 || !game.isOnMazePath(newPosition.x(),          newPosition.z() - RADIUS))
-			av.setLocalLocation(oldPosition);
-
 		if (protClient != null && game.getIsConnected())
 			protClient.sendMoveMessage(av.getWorldLocation());
 	}

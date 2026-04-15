@@ -65,9 +65,6 @@ public class MyGame extends VariableFrameRateGame
 	private static final int   GRID_COLS     = 175;     // spans ~8.75 m in X
 	private static final int   GRID_ROWS     = 415;     // spans ~20.75 m in Z
 	private boolean[][] walkableGrid;
-	// Cells that contain wall geometry – movement into these is blocked.
-	// Open path edges are NOT in this grid, so the player can step off and fall.
-	private boolean[][] wallBlockGrid;
 
 	// Y below this → avatar fell through the floor → respawn
 	private static final float MAZE_FLOOR_THRESHOLD = -0.5f;
@@ -226,10 +223,12 @@ public class MyGame extends VariableFrameRateGame
 		if ("HumanFinal".equals(avatarModelName))
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.01f));
 			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
 		else
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.2f));
 			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
 	}
 
@@ -295,12 +294,9 @@ public class MyGame extends VariableFrameRateGame
 		if (!isOutdoor && avatar.getWorldLocation().z() < MAZE_EXIT_Z)
 			transitionToOutdoor();
 
-		// Respawn if the avatar is off the walkable path or has fallen below the floor
-		if (!isOutdoor)
-		{	Vector3f pos = avatar.getWorldLocation();
-			if (!isOnMazePath(pos.x(), pos.z()))
-				respawnAvatar();
-		}
+		// Detect when the player walks off the maze floor and respawn them at the start
+		if (!isOutdoor && isOnMazePath(avatar.getWorldLocation().x(), avatar.getWorldLocation().z()) == false)
+			respawnAvatar();
 
 		// Follow-camera for outdoor exploration
 		if (isOutdoor)
@@ -372,59 +368,9 @@ public class MyGame extends VariableFrameRateGame
 				if (walkableGrid[c][r]) walkableCount++;
 		System.out.println("[MyGame] Walkability grid built (" + GRID_COLS + "x" + GRID_ROWS
 				+ "), walkable cells: " + walkableCount);
+		// Debug: confirm the avatar spawn cell is walkable
 		System.out.println("[MyGame] Start cell walkable: "
 				+ isOnMazePath(MAZE_CENTER_X, MAZE_START_Z));
-
-		// Second pass: build wall-block grid from vertical (side) wall faces.
-		// These faces have a near-zero Y component in their normal.
-		// No inflate – exact wall footprints only. MoveAction probes at a small
-		// radius to create the buffer, so open path edges are never blocked.
-		wallBlockGrid = new boolean[GRID_COLS][GRID_ROWS];
-
-		for (int t = 0; t < numTris; t++)
-		{	int vi = t * 9;
-			// Wall side face: all three vertex normals have NY near 0
-			if (Math.abs(normals[vi+1]) > 0.3f
-				|| Math.abs(normals[vi+4]) > 0.3f
-				|| Math.abs(normals[vi+7]) > 0.3f)
-				continue;
-
-			float x0 = verts[vi],     z0 = verts[vi+2] + MAZE_OFFSET_Z;
-			float x1 = verts[vi+3],   z1 = verts[vi+5] + MAZE_OFFSET_Z;
-			float x2 = verts[vi+6],   z2 = verts[vi+8] + MAZE_OFFSET_Z;
-
-			float minX = Math.min(x0, Math.min(x1, x2));
-			float maxX = Math.max(x0, Math.max(x1, x2));
-			float minZ = Math.min(z0, Math.min(z1, z2));
-			float maxZ = Math.max(z0, Math.max(z1, z2));
-
-			int colMin = Math.max(0,           (int)((minX - GRID_ORIGIN_X) / GRID_CELL));
-			int colMax = Math.min(GRID_COLS-1, (int)((maxX - GRID_ORIGIN_X) / GRID_CELL) + 1);
-			int rowMin = Math.max(0,           (int)((minZ - GRID_ORIGIN_Z) / GRID_CELL));
-			int rowMax = Math.min(GRID_ROWS-1, (int)((maxZ - GRID_ORIGIN_Z) / GRID_CELL) + 1);
-
-			for (int col = colMin; col <= colMax; col++)
-				for (int row = rowMin; row <= rowMax; row++)
-					wallBlockGrid[col][row] = true;
-		}
-		int wallCount = 0;
-		for (int c = 0; c < GRID_COLS; c++)
-			for (int r = 0; r < GRID_ROWS; r++)
-				if (wallBlockGrid[c][r]) wallCount++;
-		System.out.println("[MyGame] Wall-block grid built, wall cells: " + wallCount);
-	}
-
-	/**
-	 * Returns {@code true} if the world-space (x, z) coordinate hits a wall cell.
-	 * Used by MoveAction to block movement into walls only – open path edges
-	 * are not wall-blocked so the player can step off and trigger a respawn.
-	 */
-	public boolean isWallAt(float worldX, float worldZ)
-	{	if (isOutdoor) return false;
-		int col = (int)((worldX - GRID_ORIGIN_X) / GRID_CELL);
-		int row = (int)((worldZ - GRID_ORIGIN_Z) / GRID_CELL);
-		if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
-		return wallBlockGrid[col][row];
 	}
 
 	/**
@@ -458,7 +404,7 @@ public class MyGame extends VariableFrameRateGame
 	/** Teleports the avatar back to the maze start (called when they fall off). */
 	public void respawnAvatar()
 	{	avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, 0f, MAZE_START_Z));
-		avatar.setLocalRotation(new Matrix4f());
+		avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		System.out.println("[MyGame] Avatar respawned at start.");
 	}
 
@@ -554,14 +500,11 @@ public class MyGame extends VariableFrameRateGame
 	public void keyPressed(KeyEvent e)
 	{	switch (e.getKeyCode())
 		{	case KeyEvent.VK_W:
+			case KeyEvent.VK_S:
 				if (humanShape != null && "HumanFinal".equals(avatarModelName))
 				{	humanShape.stopAnimation();
 					humanShape.playAnimation("WALK", 0.15f, EndType.LOOP, 0);
 				}
-				break;
-			case KeyEvent.VK_S:
-				if (humanShape != null && "HumanFinal".equals(avatarModelName))
-					humanShape.stopAnimation();
 				break;
 			case KeyEvent.VK_1:
 				paused = !paused;
@@ -587,6 +530,18 @@ public class MyGame extends VariableFrameRateGame
 				break;
 		}
 		super.keyPressed(e);
+	}
+
+	@Override
+	public void keyReleased(KeyEvent e)
+	{	switch (e.getKeyCode())
+		{	case KeyEvent.VK_W:
+			case KeyEvent.VK_S:
+				if (humanShape != null && "HumanFinal".equals(avatarModelName))
+					humanShape.stopAnimation();
+				break;
+		}
+		super.keyReleased(e);
 	}
 
 	// ------------------------------------------------------------------
