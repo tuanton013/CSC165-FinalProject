@@ -6,6 +6,7 @@ import tage.shapes.AnimatedShape.EndType;
 import tage.input.*;
 import tage.input.action.*;
 import tage.networking.IGameConnection.ProtocolType;
+
 import net.java.games.input.Component.Identifier.Key;
 
 import java.lang.Math;
@@ -50,7 +51,7 @@ public class MyGame extends VariableFrameRateGame
 	// Maze geometry constants (from maze.obj bounding box)
 	// The maze is shifted +9 in Z so it sits in front of the camera.
 	private static final float MAZE_CENTER_X  =  0.16f;   // (xMin+xMax)/2
-	private static final float MAZE_FLOOR_Y   =  0.12f;   // lift so floor sits at y=0
+	private static final float MAZE_FLOOR_Y   = 15.0f;    // maze floats above terrain peaks
 	private static final float MAZE_OFFSET_Z  =  9.0f;    // world-space Z shift applied to maze
 	private static final float MAZE_START_Z   =  9.80f;   // 0.80 + MAZE_OFFSET_Z
 	private static final float MAZE_CENTER_Z  = -0.07f;   // -9.07 + MAZE_OFFSET_Z
@@ -73,8 +74,8 @@ public class MyGame extends VariableFrameRateGame
 	private boolean isOutdoor = false;
 
 	// Available assets (add more as you expand the project)
-	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj" };
-	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg", "human.png" };
+	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj", "kir.obj", "newHuman.obj" };
+	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg", "human.png", "new_character_texture.png" };
 
 	// Shared asset caches so ghosts re-use already-loaded resources
 	private Map<String, ObjShape>     shapeCache   = new HashMap<>();
@@ -200,15 +201,20 @@ public class MyGame extends VariableFrameRateGame
 	public void loadTextures()
 	{	for (String name : TEXTURE_NAMES)
 			textureCache.put(name, new TextureImage(name));
+			textureCache.put("gridTerrain.jpg",   new TextureImage("gridTerrain.jpg"));
+			textureCache.put("trainHeightMap.jpg", new TextureImage("trainHeightMap.jpg"));
 	}
 
 	@Override
 	public void buildObjects()
-	{	// Terrain – flat arena ground, scaled to 200x200 world units
-		terrain = new GameObject(GameObject.root(), terrainShape, textureCache.get("ice.jpg"));
-		terrain.setLocalScale(new Matrix4f().scaling(100.0f, 1.0f, 100.0f));
+	{	// Terrain – Tron grid ground with subtle height variation
+		terrain = new GameObject(GameObject.root(), terrainShape, textureCache.get("gridTerrain.jpg"));
+		terrain.setLocalScale(new Matrix4f().scaling(100.0f, 22.0f, 100.0f));
 		terrain.setLocalTranslation(new Matrix4f().translation(0f, 0f, 0f));
+		terrain.setHeightMap(textureCache.get("trainHeightMap.jpg"));
 		terrain.setIsTerrain(true);
+		terrain.getRenderStates().setTiling(1);
+		terrain.getRenderStates().setTileFactor(10);
 
 		// Maze
 		maze = new GameObject(GameObject.root(), mazeShape, textureCache.get("brick1.jpg"));
@@ -258,8 +264,8 @@ public class MyGame extends VariableFrameRateGame
 		// Camera: elevated above the start edge, looking at the full maze center
 		// Maze after shift: Z from 9.8 (start) to -10.1 (end), center = -0.07
 		tage.Camera cam = engine.getRenderSystem().getViewport("MAIN").getCamera();
-		cam.setLocation(new Vector3f(MAZE_CENTER_X, 14f, 13f));
-		cam.lookAt(new Vector3f(MAZE_CENTER_X, 0f, MAZE_CENTER_Z));
+		cam.setLocation(new Vector3f(MAZE_CENTER_X, 30f, 25f));
+		cam.lookAt(new Vector3f(MAZE_CENTER_X, 15f, MAZE_CENTER_Z));
 
 		// Networking (only when a server address was supplied)
 		if (serverAddress != null)
@@ -419,8 +425,9 @@ public class MyGame extends VariableFrameRateGame
 		// Hide the maze geometry so only sky + terrain are visible
 		maze.getRenderStates().disableRendering();
 
-		// Snap the avatar to ground level on the terrain side of the exit
-		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, 0f, MAZE_EXIT_Z - 2f));
+		// Snap the avatar to the terrain surface just outside the exit
+		float snapZ = MAZE_EXIT_Z - 2f;
+		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, terrain.getHeight(MAZE_CENTER_X, snapZ), snapZ));
 
 		(engine.getHUDmanager()).setHUD1(
 			"You escaped! Explore outside (W/S = move, A/D = turn)",
