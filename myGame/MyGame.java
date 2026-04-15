@@ -53,7 +53,7 @@ public class MyGame extends VariableFrameRateGame
 	// Maze geometry constants (from maze.obj bounding box)
 	// The maze is shifted +9 in Z so it sits in front of the camera.
 	private static final float MAZE_CENTER_X  =  0.16f;   // (xMin+xMax)/2
-	private static final float MAZE_FLOOR_Y   =  0.12f;   // lift so floor sits at y=0
+	private static final float MAZE_FLOOR_Y   = 15.0f;    // maze floats above terrain peaks
 	private static final float MAZE_OFFSET_Z  =  9.0f;    // world-space Z shift applied to maze
 	private static final float MAZE_START_Z   =  9.80f;   // 0.80 + MAZE_OFFSET_Z
 	private static final float MAZE_CENTER_Z  = -0.07f;   // -9.07 + MAZE_OFFSET_Z
@@ -200,7 +200,7 @@ public class MyGame extends VariableFrameRateGame
 	public void buildObjects()
 	{	// Terrain – Tron grid ground with subtle height variation
 		terrain = new GameObject(GameObject.root(), terrainShape, textureCache.get("gridTerrain.jpg"));
-		terrain.setLocalScale(new Matrix4f().scaling(100.0f, 30.0f, 100.0f));
+		terrain.setLocalScale(new Matrix4f().scaling(100.0f, 22.0f, 100.0f));
 		terrain.setLocalTranslation(new Matrix4f().translation(0f, 0f, 0f));
 		terrain.setHeightMap(textureCache.get("trainHeightMap.jpg"));
 		terrain.setIsTerrain(true);
@@ -224,18 +224,18 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.get(avatarTextureName));
 		if ("HumanFinal".equals(avatarModelName))
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.01f));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 15f, MAZE_START_Z));
 		}
 		else if ("newHuman.obj".equals(avatarModelName))
 		{	// newHuman.obj is ~6.71 units tall in Blender space (Y: -4.49 to +2.22).
-			// At scale 0.2 the feet sit 0.90 units below Y=0, so we lift by 4.49*0.2 = 0.90.
+			// Lift by maze floor (15) plus the foot offset (4.49 * scale) so feet land on the floor.
 			float s = 0.2f;
 			avatar.setLocalScale(new Matrix4f().scaling(s));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 4.49f * s, MAZE_START_Z));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 15f + 4.49f * s, MAZE_START_Z));
 		}
 		else
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.2f));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 15f, MAZE_START_Z));
 		}
 	}
 
@@ -265,8 +265,8 @@ public class MyGame extends VariableFrameRateGame
 		// Camera: elevated above the start edge, looking at the full maze center
 		// Maze after shift: Z from 9.8 (start) to -10.1 (end), center = -0.07
 		tage.Camera cam = engine.getRenderSystem().getViewport("MAIN").getCamera();
-		cam.setLocation(new Vector3f(MAZE_CENTER_X, 14f, 13f));
-		cam.lookAt(new Vector3f(MAZE_CENTER_X, 0f, MAZE_CENTER_Z));
+		cam.setLocation(new Vector3f(MAZE_CENTER_X, 30f, 25f));
+		cam.lookAt(new Vector3f(MAZE_CENTER_X, 15f, MAZE_CENTER_Z));
 
 		// Networking (only when a server address was supplied)
 		if (serverAddress != null)
