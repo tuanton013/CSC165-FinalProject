@@ -300,6 +300,15 @@ public class MyGame extends VariableFrameRateGame
 		if (!isOutdoor && avatar.getWorldLocation().z() < MAZE_EXIT_Z)
 			transitionToOutdoor();
 
+		// Terrain height enforcement – keep the avatar sitting on the ground surface
+		if (isOutdoor)
+		{	
+			Vector3f pos = avatar.getWorldLocation();
+			float terrainHeight = terrain.getHeight(pos.x(), pos.z());
+			if (pos.y() < terrainHeight)
+				avatar.setLocalLocation(new Vector3f(pos.x(), terrainHeight, pos.z()));
+		}
+
 		// Detect when the player walks off the maze floor and respawn them at the start
 		if (!isOutdoor && isOnMazePath(avatar.getWorldLocation().x(), avatar.getWorldLocation().z()) == false)
 			respawnAvatar();
