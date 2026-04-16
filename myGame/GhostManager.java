@@ -47,9 +47,9 @@ public class GhostManager
 		TextureImage texture = game.getGhostTexture(textureName);
 		GhostAvatar  ghost   = new GhostAvatar(id, shape, texture, position);
 
-		// Scale ghost to match the local avatar scale
-		Matrix4f scale = (new Matrix4f()).scaling(3.0f);
-		ghost.setLocalScale(scale);
+		// Scale ghost to match the local avatar scale (model-dependent)
+		float s = "HumanFinal".equals(modelName) ? 0.01f : 0.2f;
+		ghost.setLocalScale(new Matrix4f().scaling(s));
 
 		ghostAvatars.add(ghost);
 		System.out.println("Ghost created for " + id);
