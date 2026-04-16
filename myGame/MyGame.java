@@ -228,12 +228,12 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.get(avatarTextureName));
 		if ("HumanFinal".equals(avatarModelName))
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.01f));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_START_Z));
 			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
 		else
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.2f));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_START_Z));
 			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
 	}
@@ -409,7 +409,7 @@ public class MyGame extends VariableFrameRateGame
 
 	/** Teleports the avatar back to the maze start (called when they fall off). */
 	public void respawnAvatar()
-	{	avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, 0f, MAZE_START_Z));
+	{	avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_START_Z));
 		avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		System.out.println("[MyGame] Avatar respawned at start.");
 	}
