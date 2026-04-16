@@ -10,3 +10,6 @@ Thumbs.db
  
 # VS Code settings 
 .vscode/
+
+# PowerShell scripts
+*.ps1
