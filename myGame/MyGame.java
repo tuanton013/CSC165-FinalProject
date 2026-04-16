@@ -43,11 +43,9 @@ public class MyGame extends VariableFrameRateGame
 
 	private GameObject   avatar;
 	private GameObject   terrain;
-	private GameObject   mazeVisible;   // top + wall faces  -> maze.png texture
-	private GameObject   mazeHidden;    // bottom faces      -> no texture
+	private GameObject   maze;
 	private TerrainPlane terrainShape;
-	private ObjShape     mazeVisibleShape;
-	private ObjShape     mazeHiddenShape;
+	private ObjShape     mazeShape;
 	private Light        light1;
 
 	// Maze geometry constants (from maze.obj bounding box)
@@ -59,6 +57,18 @@ public class MyGame extends VariableFrameRateGame
 	private static final float MAZE_CENTER_Z  = -0.07f;   // -9.07 + MAZE_OFFSET_Z
 	// Maze exit: the opening at the far (negative-Z) end of the maze
 	private static final float MAZE_EXIT_Z    = -9.5f;    // trigger zone just before end wall
+
+	// Walkability grid – built once at startup from the maze floor triangles.
+	// Covers the world-space XZ footprint of the maze.
+	private static final float GRID_ORIGIN_X = -4.1f;   // world X of grid column 0
+	private static final float GRID_ORIGIN_Z = -10.3f;  // world Z of grid row 0
+	private static final float GRID_CELL     =  0.05f;  // meters per cell
+	private static final int   GRID_COLS     = 175;     // spans ~8.75 m in X
+	private static final int   GRID_ROWS     = 415;     // spans ~20.75 m in Z
+	private boolean[][] walkableGrid;
+
+	// Y below this → avatar fell through the floor → respawn
+	private static final float MAZE_FLOOR_THRESHOLD = -0.5f;
 
 	// Indoor / outdoor state
 	private boolean isOutdoor = false;
@@ -183,9 +193,8 @@ public class MyGame extends VariableFrameRateGame
 		// Terrain shape (100x100 vertex grid)
 		terrainShape = new TerrainPlane(100);
 
-		// Maze split meshes (visible = tops+walls, hidden = undersides)
-		mazeVisibleShape = new ImportedModel("maze2_visible.obj");
-		mazeHiddenShape  = new ImportedModel("maze2_hidden.obj");
+		// Maze mesh
+		mazeShape = new ImportedModel("mazeFinal.obj");
 	}
 
 	@Override
@@ -207,15 +216,10 @@ public class MyGame extends VariableFrameRateGame
 		terrain.getRenderStates().setTiling(1);
 		terrain.getRenderStates().setTileFactor(10);
 
-		// Maze visible faces (tops + walls) – brick texture (swap to maze.png once UV-painted)
-		mazeVisible = new GameObject(GameObject.root(), mazeVisibleShape, textureCache.get("brick1.jpg"));
-		mazeVisible.setLocalTranslation(new Matrix4f().translation(0f, MAZE_FLOOR_Y, MAZE_OFFSET_Z));
-		mazeVisible.setLocalScale(new Matrix4f().scaling(1.0f));
-
-		// Maze hidden faces (undersides) – plain material, closes the geometry
-		mazeHidden = new GameObject(GameObject.root(), mazeHiddenShape);
-		mazeHidden.setLocalTranslation(new Matrix4f().translation(0f, MAZE_FLOOR_Y, MAZE_OFFSET_Z));
-		mazeHidden.setLocalScale(new Matrix4f().scaling(1.0f));
+		// Maze
+		maze = new GameObject(GameObject.root(), mazeShape, textureCache.get("brick1.jpg"));
+		maze.setLocalTranslation(new Matrix4f().translation(0f, MAZE_FLOOR_Y, MAZE_OFFSET_Z));
+		maze.setLocalScale(new Matrix4f().scaling(1.0f));
 
 		// Avatar – placed at the mid-point of the maze start edge
 		avatar = new GameObject(
@@ -224,18 +228,13 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.get(avatarTextureName));
 		if ("HumanFinal".equals(avatarModelName))
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.01f));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 15f, MAZE_START_Z));
-		}
-		else if ("newHuman.obj".equals(avatarModelName))
-		{	// newHuman.obj is ~6.71 units tall in Blender space (Y: -4.49 to +2.22).
-			// Lift by maze floor (15) plus the foot offset (4.49 * scale) so feet land on the floor.
-			float s = 0.2f;
-			avatar.setLocalScale(new Matrix4f().scaling(s));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 15f + 4.49f * s, MAZE_START_Z));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
 		else
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.2f));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 15f, MAZE_START_Z));
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, 0f, MAZE_START_Z));
+			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
 	}
 
@@ -272,6 +271,9 @@ public class MyGame extends VariableFrameRateGame
 		if (serverAddress != null)
 			setupNetworking();
 
+		// Build the walkability grid from the maze floor geometry
+		buildWalkabilityGrid();
+
 		// Input bindings
 		setupInput();
 	}
@@ -298,12 +300,9 @@ public class MyGame extends VariableFrameRateGame
 		if (!isOutdoor && avatar.getWorldLocation().z() < MAZE_EXIT_Z)
 			transitionToOutdoor();
 
-		// Terrain-following: keep avatar on the heightmap surface when outdoors
-		if (isOutdoor)
-		{	Vector3f loc = avatar.getWorldLocation();
-			float terrainY = terrain.getHeight(loc.x(), loc.z());
-			avatar.setLocalLocation(new Vector3f(loc.x(), terrainY, loc.z()));
-		}
+		// Detect when the player walks off the maze floor and respawn them at the start
+		if (!isOutdoor && isOnMazePath(avatar.getWorldLocation().x(), avatar.getWorldLocation().z()) == false)
+			respawnAvatar();
 
 		// Follow-camera for outdoor exploration
 		if (isOutdoor)
@@ -317,6 +316,105 @@ public class MyGame extends VariableFrameRateGame
 	// ------------------------------------------------------------------
 
 	// ------------------------------------------------------------------
+	// Maze path enforcement – walkability grid
+	// ------------------------------------------------------------------
+
+	/**
+	 * Builds a 2-D boolean grid at startup by rasterising the up-facing floor
+	 * triangles of the maze mesh into cells.  Only triangles whose vertices sit
+	 * at the path-floor height (object-space Y ≈ 0.123) are included, so wall
+	 * tops (higher Y) are correctly excluded.
+	 */
+	private void buildWalkabilityGrid()
+	{	walkableGrid = new boolean[GRID_COLS][GRID_ROWS];
+
+		float[] verts   = mazeShape.getVertices();
+		float[] normals = mazeShape.getNormals();
+		int numTris = verts.length / 9;   // 3 vertices × 3 floats each
+
+		for (int t = 0; t < numTris; t++)
+		{	int vi = t * 9;
+
+			// 1) Must be an up-facing triangle (floor, not a wall side)
+			if (normals[vi+1] < 0.5f || normals[vi+4] < 0.5f || normals[vi+7] < 0.5f)
+				continue;
+
+			// 2) Must be at path-floor height (≈ 0.123 obj-space Y) – excludes wall tops
+			float avgY = (verts[vi+1] + verts[vi+4] + verts[vi+7]) / 3f;
+			if (Math.abs(avgY - 0.122975f) > 0.08f) continue;
+
+			// World-space XZ (maze Z-offset applied)
+			float x0 = verts[vi],     z0 = verts[vi+2] + MAZE_OFFSET_Z;
+			float x1 = verts[vi+3],   z1 = verts[vi+5] + MAZE_OFFSET_Z;
+			float x2 = verts[vi+6],   z2 = verts[vi+8] + MAZE_OFFSET_Z;
+
+			// Cell AABB for this triangle
+			float minX = Math.min(x0, Math.min(x1, x2));
+			float maxX = Math.max(x0, Math.max(x1, x2));
+			float minZ = Math.min(z0, Math.min(z1, z2));
+			float maxZ = Math.max(z0, Math.max(z1, z2));
+
+			int colMin = Math.max(0,           (int)((minX - GRID_ORIGIN_X) / GRID_CELL));
+			int colMax = Math.min(GRID_COLS-1, (int)((maxX - GRID_ORIGIN_X) / GRID_CELL) + 1);
+			int rowMin = Math.max(0,           (int)((minZ - GRID_ORIGIN_Z) / GRID_CELL));
+			int rowMax = Math.min(GRID_ROWS-1, (int)((maxZ - GRID_ORIGIN_Z) / GRID_CELL) + 1);
+
+			for (int col = colMin; col <= colMax; col++)
+			{	float px = GRID_ORIGIN_X + col * GRID_CELL + GRID_CELL * 0.5f;
+				for (int row = rowMin; row <= rowMax; row++)
+				{	float pz = GRID_ORIGIN_Z + row * GRID_CELL + GRID_CELL * 0.5f;
+					if (pointInTriangle2D(px, pz, x0, z0, x1, z1, x2, z2))
+						walkableGrid[col][row] = true;
+				}
+			}
+		}
+		int walkableCount = 0;
+		for (int c = 0; c < GRID_COLS; c++)
+			for (int r = 0; r < GRID_ROWS; r++)
+				if (walkableGrid[c][r]) walkableCount++;
+		System.out.println("[MyGame] Walkability grid built (" + GRID_COLS + "x" + GRID_ROWS
+				+ "), walkable cells: " + walkableCount);
+		// Debug: confirm the avatar spawn cell is walkable
+		System.out.println("[MyGame] Start cell walkable: "
+				+ isOnMazePath(MAZE_CENTER_X, MAZE_START_Z));
+	}
+
+	/**
+	 * Returns {@code true} if the world-space (x, z) coordinate lies on a
+	 * walkable maze floor cell.  Always returns {@code true} in outdoor mode
+	 * so movement is unrestricted after the player exits the maze.
+	 */
+	public boolean isOnMazePath(float worldX, float worldZ)
+	{	if (isOutdoor) return true;
+		int col = (int)((worldX - GRID_ORIGIN_X) / GRID_CELL);
+		int row = (int)((worldZ - GRID_ORIGIN_Z) / GRID_CELL);
+		if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+		return walkableGrid[col][row];
+	}
+
+	/** Standard 2-D point-in-triangle test (XZ plane). */
+	private boolean pointInTriangle2D(float px, float pz,
+			float x0, float z0, float x1, float z1, float x2, float z2)
+	{	float d1 = sign2D(px, pz, x0, z0, x1, z1);
+		float d2 = sign2D(px, pz, x1, z1, x2, z2);
+		float d3 = sign2D(px, pz, x2, z2, x0, z0);
+		boolean hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+		boolean hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+		return !(hasNeg && hasPos);
+	}
+
+	private float sign2D(float px, float pz, float ax, float az, float bx, float bz)
+	{	return (px - bx) * (az - bz) - (ax - bx) * (pz - bz);
+	}
+
+	/** Teleports the avatar back to the maze start (called when they fall off). */
+	public void respawnAvatar()
+	{	avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, 0f, MAZE_START_Z));
+		avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
+		System.out.println("[MyGame] Avatar respawned at start.");
+	}
+
+	// ------------------------------------------------------------------
 	// Outdoor transition
 	// ------------------------------------------------------------------
 
@@ -325,8 +423,7 @@ public class MyGame extends VariableFrameRateGame
 	{	isOutdoor = true;
 
 		// Hide the maze geometry so only sky + terrain are visible
-		mazeVisible.getRenderStates().disableRendering();
-		mazeHidden.getRenderStates().disableRendering();
+		maze.getRenderStates().disableRendering();
 
 		// Snap the avatar to the terrain surface just outside the exit
 		float snapZ = MAZE_EXIT_Z - 2f;
@@ -410,14 +507,11 @@ public class MyGame extends VariableFrameRateGame
 	public void keyPressed(KeyEvent e)
 	{	switch (e.getKeyCode())
 		{	case KeyEvent.VK_W:
+			case KeyEvent.VK_S:
 				if (humanShape != null && "HumanFinal".equals(avatarModelName))
 				{	humanShape.stopAnimation();
 					humanShape.playAnimation("WALK", 0.15f, EndType.LOOP, 0);
 				}
-				break;
-			case KeyEvent.VK_S:
-				if (humanShape != null && "HumanFinal".equals(avatarModelName))
-					humanShape.stopAnimation();
 				break;
 			case KeyEvent.VK_1:
 				paused = !paused;
@@ -443,6 +537,18 @@ public class MyGame extends VariableFrameRateGame
 				break;
 		}
 		super.keyPressed(e);
+	}
+
+	@Override
+	public void keyReleased(KeyEvent e)
+	{	switch (e.getKeyCode())
+		{	case KeyEvent.VK_W:
+			case KeyEvent.VK_S:
+				if (humanShape != null && "HumanFinal".equals(avatarModelName))
+					humanShape.stopAnimation();
+				break;
+		}
+		super.keyReleased(e);
 	}
 
 	// ------------------------------------------------------------------
