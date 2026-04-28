@@ -1,6 +1,7 @@
 package myGame;
 
 import tage.*;
+import tage.audio.*;
 import tage.shapes.*;
 import tage.shapes.AnimatedShape.EndType;
 import tage.input.*;
@@ -42,6 +43,12 @@ public class MyGame extends VariableFrameRateGame
 
 	private boolean paused = false;
 	private double  lastFrameTime, currFrameTime, elapsTime;
+
+	private IAudioManager audioMgr;
+	private Sound backgroundSound, footstepSound, victorySound;
+	private Vector3f lastAvatarLocation = new Vector3f();
+	private boolean isFootstepPlaying = false;
+	private static final float FOOTSTEP_MOVEMENT_THRESHOLD = 0.001f;
 
 	private GameObject   avatar;
 	private GameObject   terrain;
@@ -221,6 +228,38 @@ public class MyGame extends VariableFrameRateGame
 	}
 
 	@Override
+	public void loadSounds()
+	{	AudioResource resBackground, resFootstep, resVictory;
+		audioMgr = engine.getAudioManager();
+		//  WAV files 
+		resBackground = audioMgr.createAudioResource("backgroundLoop.wav", AudioResourceType.AUDIO_SAMPLE);
+		resFootstep   = audioMgr.createAudioResource("footstep.wav",       AudioResourceType.AUDIO_SAMPLE);
+		resVictory    = audioMgr.createAudioResource("victory.wav",        AudioResourceType.AUDIO_SAMPLE);
+		// Background ambience — looping, moderate volume. Will be made non-positional in a later step.
+		backgroundSound = new Sound(resBackground, SoundType.SOUND_EFFECT, 13, true);
+		backgroundSound.initialize(audioMgr);
+		// Footstep — 3D positional, looping. Start/stop based on player movement
+		footstepSound = new Sound(resFootstep, SoundType.SOUND_EFFECT, 100, true);
+		footstepSound.initialize(audioMgr);
+		footstepSound.setMaxDistance(20.0f);
+		footstepSound.setMinDistance(1.0f);
+		footstepSound.setRollOff(2.0f);
+		// Victory sound — 3D positional, ONE-TIME
+		victorySound = new Sound(resVictory, SoundType.SOUND_EFFECT, 100, false);
+		victorySound.initialize(audioMgr);
+		victorySound.setMaxDistance(80.0f);
+		victorySound.setMinDistance(5.0f);
+		victorySound.setRollOff(1.0f);
+		System.out.println("[MyGame] All 3 sounds loaded successfully");
+	}
+
+	public void setEarParameters()
+	{	Camera camera = (engine.getRenderSystem()).getViewport("MAIN").getCamera();
+		audioMgr.getEar().setLocation(avatar.getWorldLocation());
+		audioMgr.getEar().setOrientation(camera.getN(), new Vector3f(0.0f, 1.0f, 0.0f));
+	}
+
+	@Override
 	public void buildObjects()
 	{	// Terrain – Tron grid ground with subtle height variation
 		terrain = new GameObject(GameObject.root(), terrainShape, textureCache.get("gridTerrain.jpg"));
@@ -307,6 +346,12 @@ public class MyGame extends VariableFrameRateGame
 
 		// Input bindings
 		setupInput();
+
+		setEarParameters();
+		backgroundSound.setLocation(avatar.getWorldLocation());
+		backgroundSound.play();
+		System.out.println("[MyGame] Background music started");
+		lastAvatarLocation.set(avatar.getWorldLocation());
 	}
 
 	@Override
@@ -375,6 +420,24 @@ public class MyGame extends VariableFrameRateGame
 		updateThirdPersonCamera();
 
 		processNetworking((float) elapsTime);
+
+		setEarParameters();
+		backgroundSound.setLocation(avatar.getWorldLocation());
+
+		// Footstep sound: play while moving, stop when stationary
+		Vector3f currentAvatarLoc = new Vector3f(avatar.getWorldLocation());
+		float distMoved = currentAvatarLoc.distance(lastAvatarLocation);
+		boolean isMoving = distMoved > FOOTSTEP_MOVEMENT_THRESHOLD;
+		if (isMoving && !isFootstepPlaying)
+		{	footstepSound.play();
+			isFootstepPlaying = true;
+		}
+		else if (!isMoving && isFootstepPlaying)
+		{	footstepSound.stop();
+			isFootstepPlaying = false;
+		}
+		footstepSound.setLocation(currentAvatarLoc);
+		lastAvatarLocation.set(currentAvatarLoc);
 	}
 
 	// ------------------------------------------------------------------
@@ -503,7 +566,10 @@ public class MyGame extends VariableFrameRateGame
 
 	/** Called once when the avatar crosses the maze exit threshold. */
 	private void transitionToOutdoor()
-	{	isOutdoor = true;
+	{	victorySound.setLocation(avatar.getWorldLocation());
+		victorySound.play();
+		System.out.println("[MyGame] Victory sound triggered");
+		isOutdoor = true;
 
 		// Hide the maze geometry so only sky + terrain are visible
 		maze.getRenderStates().disableRendering();
