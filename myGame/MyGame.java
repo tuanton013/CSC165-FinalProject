@@ -55,6 +55,8 @@ public class MyGame extends VariableFrameRateGame
 	private GameObject   maze;
 	private TerrainPlane terrainShape;
 	private ObjShape     mazeShape;
+	private ObjShape     npcShape;
+	private TextureImage npcTex;
 	private Light        light1;
 
 	// Maze geometry constants (from maze.obj bounding box)
@@ -217,6 +219,9 @@ public class MyGame extends VariableFrameRateGame
 
 		// Maze mesh
 		mazeShape = new ImportedModel("mazeFinal.obj");
+
+		// NPC mesh used by networked AI ghost
+		npcShape = new ImportedModel("kir.obj");
 	}
 
 	@Override
@@ -225,6 +230,7 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.put(name, new TextureImage(name));
 			textureCache.put("gridTerrain.jpg",   new TextureImage("gridTerrain.jpg"));
 			textureCache.put("trainHeightMap.jpg", new TextureImage("trainHeightMap.jpg"));
+		npcTex = textureCache.get("ice.jpg");
 	}
 
 	@Override
@@ -737,6 +743,10 @@ public class MyGame extends VariableFrameRateGame
 	public Vector3f     getPlayerPosition()    { return avatar.getWorldLocation(); }
 	public String       getAvatarModelName()   { return avatarModelName; }
 	public String       getAvatarTextureName() { return avatarTextureName; }
+	/** Returns the mesh used for the networked NPC proxy object. */
+	public ObjShape     getNPCshape()          { return npcShape; }
+	/** Returns the texture used for the networked NPC proxy object. */
+	public TextureImage getNPCtexture()        { return npcTex; }
 
 	public void    setIsConnected(boolean b)   { isClientConnected = b; }
 	public boolean getIsConnected()            { return isClientConnected; }
