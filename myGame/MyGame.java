@@ -1,11 +1,14 @@
 package myGame;
 
 import tage.*;
+import tage.audio.*;
 import tage.shapes.*;
 import tage.shapes.AnimatedShape.EndType;
 import tage.input.*;
 import tage.input.action.*;
 import tage.networking.IGameConnection.ProtocolType;
+import tage.physics.PhysicsEngine;
+import tage.physics.PhysicsObject;
 
 import net.java.games.input.Component.Identifier.Key;
 
@@ -41,6 +44,12 @@ public class MyGame extends VariableFrameRateGame
 	private boolean paused = false;
 	private double  lastFrameTime, currFrameTime, elapsTime;
 
+	private IAudioManager audioMgr;
+	private Sound backgroundSound, footstepSound, victorySound;
+	private Vector3f lastAvatarLocation = new Vector3f();
+	private boolean isFootstepPlaying = false;
+	private static final float FOOTSTEP_MOVEMENT_THRESHOLD = 0.001f;
+
 	private GameObject   avatar;
 	private GameObject   terrain;
 	private GameObject   maze;
@@ -57,6 +66,12 @@ public class MyGame extends VariableFrameRateGame
 	private static final float MAZE_CENTER_Z  = -0.07f;   // -9.07 + MAZE_OFFSET_Z
 	// Maze exit: the opening at the far (negative-Z) end of the maze
 	private static final float MAZE_EXIT_Z    = -9.5f;    // trigger zone just before end wall
+	private static final float MAZE_END_WALL_TRIGGER_Z = -10.0f;
+	private static final float MAZE_END_TELEPORT_Z = -9.7f;
+	private static final float MAZE_END_TRIGGER_WIDTH  = 8.5f;
+	private static final float MAZE_END_TRIGGER_HEIGHT = 4.0f;
+	private static final float MAZE_END_TRIGGER_DEPTH  = 1.2f;
+	private static final float AVATAR_PHYSICS_RADIUS   = 0.3f;
 
 	// Walkability grid – built once at startup from the maze floor triangles.
 	// Covers the world-space XZ footprint of the maze.
@@ -70,9 +85,15 @@ public class MyGame extends VariableFrameRateGame
 	// Y below this → avatar fell through the floor → respawn
 	private static final float MAZE_FLOOR_THRESHOLD = -0.5f;
 
+	// Physics objects
+	private PhysicsObject avatarPhysicsObj;
+	private PhysicsObject exitTriggerPhysicsObj;
+	private boolean physicsVizEnabled = false;
+
 	// Indoor / outdoor state
 	private boolean isOutdoor = false;
 	private boolean pendingOutdoorTransition = false;
+	private boolean allowUnwalkablePath = false;
 
 	// Available assets (add more as you expand the project)
 	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj", "kir.obj", "newHuman.obj" };
@@ -207,6 +228,38 @@ public class MyGame extends VariableFrameRateGame
 	}
 
 	@Override
+	public void loadSounds()
+	{	AudioResource resBackground, resFootstep, resVictory;
+		audioMgr = engine.getAudioManager();
+		//  WAV files 
+		resBackground = audioMgr.createAudioResource("backgroundLoop.wav", AudioResourceType.AUDIO_SAMPLE);
+		resFootstep   = audioMgr.createAudioResource("footstep.wav",       AudioResourceType.AUDIO_SAMPLE);
+		resVictory    = audioMgr.createAudioResource("victory.wav",        AudioResourceType.AUDIO_SAMPLE);
+		// Background ambience — looping, moderate volume. Will be made non-positional in a later step.
+		backgroundSound = new Sound(resBackground, SoundType.SOUND_EFFECT, 13, true);
+		backgroundSound.initialize(audioMgr);
+		// Footstep — 3D positional, looping. Start/stop based on player movement
+		footstepSound = new Sound(resFootstep, SoundType.SOUND_EFFECT, 100, true);
+		footstepSound.initialize(audioMgr);
+		footstepSound.setMaxDistance(20.0f);
+		footstepSound.setMinDistance(1.0f);
+		footstepSound.setRollOff(2.0f);
+		// Victory sound — 3D positional, ONE-TIME
+		victorySound = new Sound(resVictory, SoundType.SOUND_EFFECT, 100, false);
+		victorySound.initialize(audioMgr);
+		victorySound.setMaxDistance(80.0f);
+		victorySound.setMinDistance(5.0f);
+		victorySound.setRollOff(1.0f);
+		System.out.println("[MyGame] All 3 sounds loaded successfully");
+	}
+
+	public void setEarParameters()
+	{	Camera camera = (engine.getRenderSystem()).getViewport("MAIN").getCamera();
+		audioMgr.getEar().setLocation(avatar.getWorldLocation());
+		audioMgr.getEar().setOrientation(camera.getN(), new Vector3f(0.0f, 1.0f, 0.0f));
+	}
+
+	@Override
 	public void buildObjects()
 	{	// Terrain – Tron grid ground with subtle height variation
 		terrain = new GameObject(GameObject.root(), terrainShape, textureCache.get("gridTerrain.jpg"));
@@ -256,17 +309,33 @@ public class MyGame extends VariableFrameRateGame
 	}
 
 	@Override
+	public void initializePhysicsObjects()
+	{	PhysicsEngine pe = engine.getSceneGraph().getPhysicsEngine();
+		pe.setGravity(new float[]{0f, 0f, 0f});
+
+		// Dynamic sphere for the avatar (mass=1, gravity=0 so it doesn't fall)
+		org.joml.Vector3f avatarStartLoc = new org.joml.Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_START_Z);
+		org.joml.Quaternionf identityRot  = new org.joml.Quaternionf(0f, 0f, 0f, 1f);
+		avatarPhysicsObj = engine.getSceneGraph().addPhysicsSphere(
+				1.0f, avatarStartLoc, identityRot, AVATAR_PHYSICS_RADIUS);
+		avatarPhysicsObj.setDamping(0.9f, 0.9f);
+
+		// Static box at the far wall – wide trigger so end-wall collision is reliable.
+		org.joml.Vector3f exitLoc = new org.joml.Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_END_WALL_TRIGGER_Z);
+		float[] exitBoxSize = { MAZE_END_TRIGGER_WIDTH, MAZE_END_TRIGGER_HEIGHT, MAZE_END_TRIGGER_DEPTH };
+		exitTriggerPhysicsObj = engine.getSceneGraph().addPhysicsBox(
+				0f, exitLoc, identityRot, exitBoxSize);
+	}
+
+	@Override
 	public void initializeGame()
 	{	lastFrameTime = System.currentTimeMillis();
 		currFrameTime = System.currentTimeMillis();
 		elapsTime     = 0.0;
 
 		(engine.getRenderSystem()).setWindowDimensions(1900, 1000);
-		// Camera: elevated above the start edge, looking at the full maze center
-		// Maze after shift: Z from 9.8 (start) to -10.1 (end), center = -0.07
-		tage.Camera cam = engine.getRenderSystem().getViewport("MAIN").getCamera();
-		cam.setLocation(new Vector3f(MAZE_CENTER_X, 30f, 25f));
-		cam.lookAt(new Vector3f(MAZE_CENTER_X, 15f, MAZE_CENTER_Z));
+		// Start in third-person follow mode
+		updateThirdPersonCamera();
 
 		// Networking (only when a server address was supplied)
 		if (serverAddress != null)
@@ -277,6 +346,12 @@ public class MyGame extends VariableFrameRateGame
 
 		// Input bindings
 		setupInput();
+
+		setEarParameters();
+		backgroundSound.setLocation(avatar.getWorldLocation());
+		backgroundSound.play();
+		System.out.println("[MyGame] Background music started");
+		lastAvatarLocation.set(avatar.getWorldLocation());
 	}
 
 	@Override
@@ -285,13 +360,29 @@ public class MyGame extends VariableFrameRateGame
 		currFrameTime = System.currentTimeMillis();
 		if (!paused) elapsTime += (currFrameTime - lastFrameTime) / 1000.0;
 
-		if (!isOutdoor)
-			(engine.getHUDmanager()).setHUD1(
-					"Time = " + Math.round((float) elapsTime) + "s  |  Reach the far end to escape!",
-					new Vector3f(1, 0, 0), 15, 15);
+		String modeText = isOutdoor ? "OUTDOOR" : "MAZE";
+		String freeWalkText = allowUnwalkablePath ? "ON" : "OFF";
+		(engine.getHUDmanager()).setHUD1(
+				"Mode: " + modeText + "  Time: " + Math.round((float) elapsTime)
+				+ "s  FreeWalk(8): " + freeWalkText,
+				isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
+		(engine.getHUDmanager()).setHUD2(
+				"W/S Move  A/D Turn  7 Teleport End  8 Toggle FreeWalk  P PhysicsViz  6 ForceExit  2/3 Wire  1 Pause  ESC Quit",
+				new Vector3f(1, 1, 1), 15, 35);
 
 		// Poll input devices so MoveAction etc. fire
 		engine.getInputManager().update((float) elapsTime);
+
+		// Step the physics simulation and detect collisions after movement updates.
+		PhysicsEngine pe = engine.getSceneGraph().getPhysicsEngine();
+		if (avatarPhysicsObj != null)
+		{	// Sync the physics sphere with the avatar's visual position each frame
+			avatarPhysicsObj.setTransform(
+					avatar.getWorldLocation(),
+					new org.joml.Quaternionf(0f, 0f, 0f, 1f));
+		}
+		pe.update((float)(currFrameTime - lastFrameTime) / 1000f);
+		pe.detectCollisions();
 
 		// Update skeleton animation if the HumanFinal model is the active avatar
 		if (humanShape != null && "HumanFinal".equals(avatarModelName))
@@ -303,9 +394,16 @@ public class MyGame extends VariableFrameRateGame
 			transitionToOutdoor();
 		}
 
-		// Detect when the player reaches the maze exit and step outside
-		if (!isOutdoor && avatar.getWorldLocation().z() < MAZE_EXIT_Z)
-			transitionToOutdoor();
+		// Detect maze end using physics collisions plus trigger volume overlap fallback.
+		if (!isOutdoor)
+		{	boolean hitByPhysics = false;
+			if (avatarPhysicsObj != null && exitTriggerPhysicsObj != null)
+				hitByPhysics = avatarPhysicsObj.getFullCollidedSet().contains(exitTriggerPhysicsObj);
+
+			boolean hitByVolume = isInsideEndTriggerVolume(avatar.getWorldLocation());
+			if (hitByPhysics || hitByVolume)
+				transitionToOutdoor();
+		}
 
 		// Terrain following – always keep avatar on the ground surface
 		if (isOutdoor)
@@ -315,14 +413,31 @@ public class MyGame extends VariableFrameRateGame
 		}
 
 		// Detect when the player walks off the maze floor and respawn them at the start
-		if (!isOutdoor && isOnMazePath(avatar.getWorldLocation().x(), avatar.getWorldLocation().z()) == false)
+		if (!isOutdoor && !allowUnwalkablePath && isOnMazePath(avatar.getWorldLocation().x(), avatar.getWorldLocation().z()) == false)
 			respawnAvatar();
 
-		// Follow-camera for outdoor exploration
-		if (isOutdoor)
-			updateOutdoorCamera();
+		// Third-person follow camera (maze and outdoor)
+		updateThirdPersonCamera();
 
 		processNetworking((float) elapsTime);
+
+		setEarParameters();
+		backgroundSound.setLocation(avatar.getWorldLocation());
+
+		// Footstep sound: play while moving, stop when stationary
+		Vector3f currentAvatarLoc = new Vector3f(avatar.getWorldLocation());
+		float distMoved = currentAvatarLoc.distance(lastAvatarLocation);
+		boolean isMoving = distMoved > FOOTSTEP_MOVEMENT_THRESHOLD;
+		if (isMoving && !isFootstepPlaying)
+		{	footstepSound.play();
+			isFootstepPlaying = true;
+		}
+		else if (!isMoving && isFootstepPlaying)
+		{	footstepSound.stop();
+			isFootstepPlaying = false;
+		}
+		footstepSound.setLocation(currentAvatarLoc);
+		lastAvatarLocation.set(currentAvatarLoc);
 	}
 
 	// ------------------------------------------------------------------
@@ -428,13 +543,33 @@ public class MyGame extends VariableFrameRateGame
 		System.out.println("[MyGame] Avatar respawned at start.");
 	}
 
+	/** Teleports avatar near the far wall to quickly test exit transition. */
+	public void teleportToMazeEnd()
+	{	avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_END_TELEPORT_Z));
+		if (avatarPhysicsObj != null)
+			avatarPhysicsObj.setTransform(avatar.getWorldLocation(), new org.joml.Quaternionf(0f, 0f, 0f, 1f));
+		System.out.println("[MyGame] Teleported to maze end test point.");
+	}
+
+	/** Fallback overlap check against the maze end trigger volume (XZ only). */
+	private boolean isInsideEndTriggerVolume(Vector3f pos)
+	{	float halfWidth = MAZE_END_TRIGGER_WIDTH * 0.5f + AVATAR_PHYSICS_RADIUS;
+		float halfDepth = MAZE_END_TRIGGER_DEPTH * 0.5f + AVATAR_PHYSICS_RADIUS;
+		boolean insideX = Math.abs(pos.x() - MAZE_CENTER_X) <= halfWidth;
+		boolean insideZ = Math.abs(pos.z() - MAZE_END_WALL_TRIGGER_Z) <= halfDepth;
+		return insideX && insideZ;
+	}
+
 	// ------------------------------------------------------------------
 	// Outdoor transition
 	// ------------------------------------------------------------------
 
 	/** Called once when the avatar crosses the maze exit threshold. */
 	private void transitionToOutdoor()
-	{	isOutdoor = true;
+	{	victorySound.setLocation(avatar.getWorldLocation());
+		victorySound.play();
+		System.out.println("[MyGame] Victory sound triggered");
+		isOutdoor = true;
 
 		// Hide the maze geometry so only sky + terrain are visible
 		maze.getRenderStates().disableRendering();
@@ -450,20 +585,28 @@ public class MyGame extends VariableFrameRateGame
 		System.out.println("[MyGame] Player exited the maze – outdoor mode active.");
 	}
 
-	/** Third-person follow camera used during outdoor exploration. */
-	private void updateOutdoorCamera()
+	/** Third-person follow camera used throughout gameplay. */
+	private void updateThirdPersonCamera()
 	{	tage.Camera cam = engine.getRenderSystem().getViewport("MAIN").getCamera();
 		Vector3f avatarPos = avatar.getWorldLocation();
 
-		// 6 units behind the avatar's facing direction, 3 units above
-		Vector4f back = new Vector4f(0f, 0f, 6f, 1f);
-		back.mul(avatar.getWorldRotation());
+		float followDistance = isOutdoor ? 5f : 5.5f;
+		float followHeight   = isOutdoor ? 4f : 5f;
+		float lookHeight     = 3.2f;
+
+		// World-space chase camera: follows character position only (no turn coupling).
 		Vector3f camPos = new Vector3f(
-				avatarPos.x() + back.x(),
-				avatarPos.y() + back.y() + 3f,
-				avatarPos.z() + back.z());
+				avatarPos.x(),
+				avatarPos.y() + followHeight,
+				avatarPos.z() + followDistance);
+
+		Vector3f lookTarget = new Vector3f(
+				avatarPos.x(),
+				avatarPos.y() + lookHeight,
+				avatarPos.z());
+
 		cam.setLocation(camPos);
-		cam.lookAt(new Vector3f(avatarPos.x(), avatarPos.y() + 1f, avatarPos.z()));
+		cam.lookAt(lookTarget);
 	}
 
 	private void setupNetworking()
@@ -547,6 +690,21 @@ public class MyGame extends VariableFrameRateGame
 			case KeyEvent.VK_6:
 				if (!isOutdoor)
 					pendingOutdoorTransition = true;
+				break;
+			case KeyEvent.VK_7:
+				if (!isOutdoor)
+					teleportToMazeEnd();
+				break;
+			case KeyEvent.VK_8:
+				allowUnwalkablePath = !allowUnwalkablePath;
+				System.out.println("[MyGame] Unwalkable-path restriction: " + (allowUnwalkablePath ? "OFF" : "ON"));
+				break;
+			case KeyEvent.VK_P:
+				physicsVizEnabled = !physicsVizEnabled;
+				if (physicsVizEnabled)
+					engine.enablePhysicsWorldRender();
+				else
+					engine.disablePhysicsWorldRender();
 				break;
 			case KeyEvent.VK_ESCAPE:
 				if (protClient != null && isClientConnected)
