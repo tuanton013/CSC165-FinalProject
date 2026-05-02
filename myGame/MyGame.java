@@ -108,6 +108,9 @@ public class MyGame extends VariableFrameRateGame
 	// Animated shape for the HumanFinal model
 	private AnimatedShape humanShape;
 
+	// Animated shape for the robot (newHuman.obj slot)
+	private AnimatedShape robotShape;
+
 	// The avatar choices made at startup
 	private String avatarModelName;
 	private String avatarTextureName;
@@ -211,8 +214,14 @@ public class MyGame extends VariableFrameRateGame
 
 		// Pre-load every other OBJ model into the cache
 		for (String name : MODEL_NAMES)
-			if (!name.equals("HumanFinal"))
+			if (!name.equals("HumanFinal") && !name.equals("newHuman.obj"))
 				shapeCache.put(name, new ImportedModel(name));
+
+		// Load the animated robot model (newHuman.obj slot)
+		robotShape = new AnimatedShape("robot.rkm", "robot.rks");
+		robotShape.loadAnimation("WALK", "robotWalk.rka");
+		robotShape.loadAnimation("IDLE", "robotIdle.rka");
+		shapeCache.put("newHuman.obj", robotShape);
 
 		// Terrain shape (100x100 vertex grid)
 		terrainShape = new TerrainPlane(100);
@@ -358,6 +367,10 @@ public class MyGame extends VariableFrameRateGame
 		backgroundSound.play();
 		System.out.println("[MyGame] Background music started");
 		lastAvatarLocation.set(avatar.getWorldLocation());
+		if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+		{	robotShape.playAnimation("IDLE", 0.5f, EndType.LOOP, 0);
+			System.out.println("[MyGame] IDLE animation started");
+		}
 	}
 
 	@Override
@@ -430,6 +443,10 @@ public class MyGame extends VariableFrameRateGame
 		setEarParameters();
 		backgroundSound.setLocation(avatar.getWorldLocation());
 
+		// Update skeleton animation for robot model
+		if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+			robotShape.updateAnimation();
+
 		// Footstep sound: play while moving, stop when stationary
 		Vector3f currentAvatarLoc = new Vector3f(avatar.getWorldLocation());
 		float distMoved = currentAvatarLoc.distance(lastAvatarLocation);
@@ -437,10 +454,18 @@ public class MyGame extends VariableFrameRateGame
 		if (isMoving && !isFootstepPlaying)
 		{	footstepSound.play();
 			isFootstepPlaying = true;
+			if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+			{	robotShape.stopAnimation();
+				robotShape.playAnimation("WALK", 0.25f, EndType.LOOP, 0);
+			}
 		}
 		else if (!isMoving && isFootstepPlaying)
 		{	footstepSound.stop();
 			isFootstepPlaying = false;
+			if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+			{	robotShape.stopAnimation();
+				robotShape.playAnimation("IDLE", 0.5f, EndType.LOOP, 0);
+			}
 		}
 		footstepSound.setLocation(currentAvatarLoc);
 		lastAvatarLocation.set(currentAvatarLoc);
