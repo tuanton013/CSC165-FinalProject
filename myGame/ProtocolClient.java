@@ -35,6 +35,7 @@ public class ProtocolClient extends GameConnectionClient
 	private MyGame game;
 	private UUID id;
 	private GhostManager ghostManager;
+	private GhostNPC ghostNPC;
 
 	public ProtocolClient(InetAddress remAddr, int remPort,
 	                      ProtocolType pType, MyGame game) throws IOException
@@ -64,6 +65,7 @@ public class ProtocolClient extends GameConnectionClient
 					game.getPlayerPosition(),
 					game.getAvatarModelName(),
 					game.getAvatarTextureName());
+				sendNeedNPCmsg();
 			}
 			else
 			{	game.setIsConnected(false);
@@ -109,6 +111,52 @@ public class ProtocolClient extends GameConnectionClient
 				Float.parseFloat(t[4]));
 			ghostManager.updateGhostAvatar(ghostID, pos);
 		}
+
+		// ---- createNPC / mnpc ----
+		if ((t[0].compareTo("createNPC") == 0 || t[0].compareTo("mnpc") == 0)
+			&& t.length >= 5)
+		{	Vector3f npcPos = new Vector3f(
+				Float.parseFloat(t[1]),
+				Float.parseFloat(t[2]),
+				Float.parseFloat(t[3]));
+			double size = Double.parseDouble(t[4]);
+			updateGhostNPC(npcPos, size);
+		}
+
+		// ---- isnr ----
+		if (t[0].compareTo("isnr") == 0 && t.length >= 5)
+		{	Vector3f npcPos = new Vector3f(
+				Float.parseFloat(t[1]),
+				Float.parseFloat(t[2]),
+				Float.parseFloat(t[3]));
+			double criteria = Double.parseDouble(t[4]);
+			if (game.getPlayerPosition().distance(npcPos) <= (float) criteria)
+				sendIsNearMessage();
+		}
+	}
+
+	private void createGhostNPC(Vector3f position) throws IOException
+	{
+		if (ghostNPC == null)
+		{	ghostNPC = new GhostNPC(0, game.getNPCshape(), game.getNPCtexture(), position);
+			ghostNPC.setLocalScale(new org.joml.Matrix4f().scaling(0.2f));
+		}
+	}
+
+	private void updateGhostNPC(Vector3f position, double gsize)
+	{
+		if (ghostNPC == null)
+		{	try
+			{	createGhostNPC(position);
+			}
+			catch (IOException e)
+			{	System.out.println("error creating npc");
+			}
+		}
+		if (ghostNPC != null)
+		{	ghostNPC.setPosition(position);
+			ghostNPC.setSize(gsize > 1.0);
+		}
 	}
 
 	// -----------------------------------------------------------------------
@@ -119,6 +167,22 @@ public class ProtocolClient extends GameConnectionClient
 	public void sendJoinMessage()
 	{	try
 		{	sendPacket("join," + id.toString());
+		}
+		catch (IOException e) { e.printStackTrace(); }
+	}
+
+	/** format: needNPC,localId */
+	public void sendNeedNPCmsg()
+	{	try
+		{	sendPacket("needNPC," + id.toString());
+		}
+		catch (IOException e) { e.printStackTrace(); }
+	}
+
+	/** format: isnear,localId */
+	public void sendIsNearMessage()
+	{	try
+		{	sendPacket("isnear," + id.toString());
 		}
 		catch (IOException e) { e.printStackTrace(); }
 	}
@@ -172,5 +236,10 @@ public class ProtocolClient extends GameConnectionClient
 		catch (IOException e) { e.printStackTrace(); }
 	}
 
+	/**
+	 * Returns this client's unique network identifier.
+	 *
+	 * @return local client UUID
+	 */
 	public UUID getID() { return id; }
 }
