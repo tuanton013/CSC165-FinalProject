@@ -472,6 +472,16 @@ public class MyGame extends VariableFrameRateGame
 		}
 		footstepSound.setLocation(currentAvatarLoc);
 		lastAvatarLocation.set(currentAvatarLoc);
+
+		// Lighting: every 5-second cycle the scene gradually fades to black,
+		// then snaps back to full brightness and repeats.
+		// cyclePos goes 0→5 within each cycle; brightness goes 1→0.
+		double cyclePos  = elapsTime % 5.0;
+		float  brightness = 1.0f - (float)(cyclePos / 5.0);
+		Light.setGlobalAmbient(0.5f * brightness, 0.5f * brightness, 0.5f * brightness);
+		light1.setAmbient (0.3f * brightness, 0.3f * brightness, 0.3f * brightness);
+		light1.setDiffuse (0.8f * brightness, 0.8f * brightness, 0.8f * brightness);
+		light1.setSpecular(       brightness,        brightness,        brightness);
 	}
 
 	// ------------------------------------------------------------------
