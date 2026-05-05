@@ -14,13 +14,22 @@ import tage.networking.IGameConnection.ProtocolType;
  */
 public class NetworkingServer
 {
-	private GameServerUDP thisUDPServer;
+	private GameAIServerUDP thisUDPServer;
+	private NPCcontroller npcCtrl;
 
+	/**
+	 * Creates and starts the UDP networking server with NPC AI support.
+	 *
+	 * @param serverPort server listen port
+	 * @param protocol protocol name (UDP expected)
+	 */
 	public NetworkingServer(int serverPort, String protocol)
 	{	try
 		{	if (protocol.toUpperCase().compareTo("UDP") == 0)
-			{	thisUDPServer = new GameServerUDP(serverPort);
-				System.out.println("UDP game server started on port " + serverPort);
+			{	npcCtrl = new NPCcontroller();
+				thisUDPServer = new GameAIServerUDP(serverPort, npcCtrl);
+				npcCtrl.start(thisUDPServer);
+				System.out.println("UDP game + AI server started on port " + serverPort);
 			}
 			else
 			{	System.out.println("Only UDP is supported in this implementation.");
@@ -29,6 +38,11 @@ public class NetworkingServer
 		catch (IOException e) { e.printStackTrace(); }
 	}
 
+	/**
+	 * Program entry point for the networking server process.
+	 *
+	 * @param args expected as <port> <protocol>
+	 */
 	public static void main(String[] args)
 	{	if (args.length < 2)
 		{	System.out.println("Usage: NetworkingServer <port> <protocol>");

@@ -55,12 +55,15 @@ public class MyGame extends VariableFrameRateGame
 	private GameObject   maze;
 	private TerrainPlane terrainShape;
 	private ObjShape     mazeShape;
+	private ObjShape     npcShape;
+	private TextureImage npcTex;
 	private Light        light1;
 
 	// Maze geometry constants (from maze.obj bounding box)
 	// The maze is shifted +9 in Z so it sits in front of the camera.
 	private static final float MAZE_CENTER_X  =  0.16f;   // (xMin+xMax)/2
 	private static final float MAZE_FLOOR_Y   = 15.0f;    // maze floats above terrain peaks
+	private static final float ROBOT_VISUAL_Y_OFFSET = 0.2f; // feet-clipping fix for AnimatedShape origin
 	private static final float MAZE_OFFSET_Z  =  9.0f;    // world-space Z shift applied to maze
 	private static final float MAZE_START_Z   =  9.80f;   // 0.80 + MAZE_OFFSET_Z
 	private static final float MAZE_CENTER_Z  = -0.07f;   // -9.07 + MAZE_OFFSET_Z
@@ -105,6 +108,9 @@ public class MyGame extends VariableFrameRateGame
 
 	// Animated shape for the HumanFinal model
 	private AnimatedShape humanShape;
+
+	// Animated shape for the robot (newHuman.obj slot)
+	private AnimatedShape robotShape;
 
 	// The avatar choices made at startup
 	private String avatarModelName;
@@ -209,14 +215,23 @@ public class MyGame extends VariableFrameRateGame
 
 		// Pre-load every other OBJ model into the cache
 		for (String name : MODEL_NAMES)
-			if (!name.equals("HumanFinal"))
+			if (!name.equals("HumanFinal") && !name.equals("newHuman.obj"))
 				shapeCache.put(name, new ImportedModel(name));
+
+		// Load the animated robot model (newHuman.obj slot)
+		robotShape = new AnimatedShape("robot.rkm", "robot.rks");
+		robotShape.loadAnimation("WALK", "robotWalk.rka");
+		robotShape.loadAnimation("IDLE", "robotIdle.rka");
+		shapeCache.put("newHuman.obj", robotShape);
 
 		// Terrain shape (100x100 vertex grid)
 		terrainShape = new TerrainPlane(100);
 
 		// Maze mesh
 		mazeShape = new ImportedModel("mazeFinal.obj");
+
+		// NPC mesh used by networked AI ghost
+		npcShape = new ImportedModel("kir.obj");
 	}
 
 	@Override
@@ -225,6 +240,7 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.put(name, new TextureImage(name));
 			textureCache.put("gridTerrain.jpg",   new TextureImage("gridTerrain.jpg"));
 			textureCache.put("trainHeightMap.jpg", new TextureImage("trainHeightMap.jpg"));
+		npcTex = textureCache.get("ice.jpg");
 	}
 
 	@Override
@@ -287,7 +303,8 @@ public class MyGame extends VariableFrameRateGame
 		}
 		else
 		{	avatar.setLocalScale(new Matrix4f().scaling(0.2f));
-			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_START_Z));
+			float startY = "newHuman.obj".equals(avatarModelName) ? MAZE_FLOOR_Y + ROBOT_VISUAL_Y_OFFSET : MAZE_FLOOR_Y;
+			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, startY, MAZE_START_Z));
 			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
 	}
@@ -352,6 +369,10 @@ public class MyGame extends VariableFrameRateGame
 		backgroundSound.play();
 		System.out.println("[MyGame] Background music started");
 		lastAvatarLocation.set(avatar.getWorldLocation());
+		if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+		{	robotShape.playAnimation("IDLE", 0.2f, EndType.LOOP, 0);
+			System.out.println("[MyGame] IDLE animation started");
+		}
 	}
 
 	@Override
@@ -409,7 +430,8 @@ public class MyGame extends VariableFrameRateGame
 		if (isOutdoor)
 		{	Vector3f pos = avatar.getWorldLocation();
 			float terrainHeight = terrain.getHeight(pos.x(), pos.z());
-			avatar.setLocalLocation(new Vector3f(pos.x(), terrainHeight, pos.z()));
+			float yOffset = "newHuman.obj".equals(avatarModelName) ? ROBOT_VISUAL_Y_OFFSET : 0.0f;
+			avatar.setLocalLocation(new Vector3f(pos.x(), terrainHeight + yOffset, pos.z()));
 		}
 
 		// Detect when the player walks off the maze floor and respawn them at the start
@@ -424,6 +446,10 @@ public class MyGame extends VariableFrameRateGame
 		setEarParameters();
 		backgroundSound.setLocation(avatar.getWorldLocation());
 
+		// Update skeleton animation for robot model
+		if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+			robotShape.updateAnimation();
+
 		// Footstep sound: play while moving, stop when stationary
 		Vector3f currentAvatarLoc = new Vector3f(avatar.getWorldLocation());
 		float distMoved = currentAvatarLoc.distance(lastAvatarLocation);
@@ -431,10 +457,18 @@ public class MyGame extends VariableFrameRateGame
 		if (isMoving && !isFootstepPlaying)
 		{	footstepSound.play();
 			isFootstepPlaying = true;
+			if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+			{	robotShape.stopAnimation();
+				robotShape.playAnimation("WALK", 0.25f, EndType.LOOP, 0);
+			}
 		}
 		else if (!isMoving && isFootstepPlaying)
 		{	footstepSound.stop();
 			isFootstepPlaying = false;
+			if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+			{	robotShape.stopAnimation();
+				robotShape.playAnimation("IDLE", 0.2f, EndType.LOOP, 0);
+			}
 		}
 		footstepSound.setLocation(currentAvatarLoc);
 		lastAvatarLocation.set(currentAvatarLoc);
@@ -538,14 +572,16 @@ public class MyGame extends VariableFrameRateGame
 
 	/** Teleports the avatar back to the maze start (called when they fall off). */
 	public void respawnAvatar()
-	{	avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_START_Z));
+	{	float respawnY = "newHuman.obj".equals(avatarModelName) ? MAZE_FLOOR_Y + ROBOT_VISUAL_Y_OFFSET : MAZE_FLOOR_Y;
+		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, respawnY, MAZE_START_Z));
 		avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		System.out.println("[MyGame] Avatar respawned at start.");
 	}
 
 	/** Teleports avatar near the far wall to quickly test exit transition. */
 	public void teleportToMazeEnd()
-	{	avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_END_TELEPORT_Z));
+	{	float teleportY = "newHuman.obj".equals(avatarModelName) ? MAZE_FLOOR_Y + ROBOT_VISUAL_Y_OFFSET : MAZE_FLOOR_Y;
+		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, teleportY, MAZE_END_TELEPORT_Z));
 		if (avatarPhysicsObj != null)
 			avatarPhysicsObj.setTransform(avatar.getWorldLocation(), new org.joml.Quaternionf(0f, 0f, 0f, 1f));
 		System.out.println("[MyGame] Teleported to maze end test point.");
@@ -576,7 +612,8 @@ public class MyGame extends VariableFrameRateGame
 
 		// Snap the avatar to the terrain surface just outside the exit
 		float snapZ = MAZE_EXIT_Z - 2f;
-		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, terrain.getHeight(MAZE_CENTER_X, snapZ), snapZ));
+		float snapYOffset = "newHuman.obj".equals(avatarModelName) ? ROBOT_VISUAL_Y_OFFSET : 0.0f;
+		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, terrain.getHeight(MAZE_CENTER_X, snapZ) + snapYOffset, snapZ));
 
 		(engine.getHUDmanager()).setHUD1(
 			"You escaped! Explore outside (W/S = move, A/D = turn)",
@@ -737,6 +774,10 @@ public class MyGame extends VariableFrameRateGame
 	public Vector3f     getPlayerPosition()    { return avatar.getWorldLocation(); }
 	public String       getAvatarModelName()   { return avatarModelName; }
 	public String       getAvatarTextureName() { return avatarTextureName; }
+	/** Returns the mesh used for the networked NPC proxy object. */
+	public ObjShape     getNPCshape()          { return npcShape; }
+	/** Returns the texture used for the networked NPC proxy object. */
+	public TextureImage getNPCtexture()        { return npcTex; }
 
 	public void    setIsConnected(boolean b)   { isClientConnected = b; }
 	public boolean getIsConnected()            { return isClientConnected; }
