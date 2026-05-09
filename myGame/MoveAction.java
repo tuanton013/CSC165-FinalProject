@@ -31,7 +31,7 @@ public class MoveAction extends AbstractInputAction
 		Vector3f oldPosition = new Vector3f(av.getWorldLocation());
 		var moveDir = new Vector4f(0f, 0f, 1f, 1f);
 		moveDir.mul(av.getWorldRotation());
-		moveDir.mul(direction * 0.01f * getSpeed());
+		moveDir.mul(direction * 0.01f * getSpeed() * game.getDangerSpeedMultiplier());
 		// Build proposed position in a fresh vector, leaving oldPosition untouched
 		Vector3f newPosition = new Vector3f(oldPosition)
 				.add(moveDir.x(), moveDir.y(), moveDir.z());

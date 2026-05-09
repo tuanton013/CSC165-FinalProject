@@ -242,4 +242,9 @@ public class ProtocolClient extends GameConnectionClient
 	 * @return local client UUID
 	 */
 	public UUID getID() { return id; }
+
+	/**
+	 * Returns the client-side GhostNPC, or null if it has not been spawned yet.
+	 */
+	public GhostNPC getGhostNPC() { return ghostNPC; }
 }
