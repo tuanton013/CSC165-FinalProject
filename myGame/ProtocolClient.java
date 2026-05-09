@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.util.UUID;
 
+import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import tage.networking.client.GameConnectionClient;
@@ -52,6 +54,7 @@ public class ProtocolClient extends GameConnectionClient
 	@Override
 	protected void processPacket(Object msg)
 	{
+		if (msg == null) return;   // null arrives when the UDP receive loop catches a corrupt packet
 		String strMessage = (String) msg;
 		String[] t = strMessage.split(",");
 
@@ -88,8 +91,18 @@ public class ProtocolClient extends GameConnectionClient
 				Float.parseFloat(t[4]));
 			String modelName   = t[5];
 			String textureName = (t.length >= 7) ? t[6] : t[5];
+			// Optional rotation quaternion (fields 7-10)
+			Matrix4f rotation = null;
+			if (t.length >= 11)
+			{	Quaternionf q = new Quaternionf(
+					Float.parseFloat(t[7]),
+					Float.parseFloat(t[8]),
+					Float.parseFloat(t[9]),
+					Float.parseFloat(t[10]));
+				rotation = new Matrix4f().rotation(q);
+			}
 			try
-			{	ghostManager.createOrUpdateGhost(ghostID, pos, modelName, textureName);
+			{	ghostManager.createOrUpdateGhost(ghostID, pos, modelName, textureName, rotation);
 			}
 			catch (IOException e)
 			{	System.out.println("error creating ghost avatar: " + e.getMessage());
@@ -102,14 +115,27 @@ public class ProtocolClient extends GameConnectionClient
 			sendDetailsForMessage(remoteID, game.getPlayerPosition());
 		}
 
-		// ---- move – update ghost position ----
+		// ---- move – update ghost position, rotation, and animation state ----
 		if (t[0].compareTo("move") == 0 && t.length >= 5)
 		{	UUID ghostID = UUID.fromString(t[1]);
 			Vector3f pos = new Vector3f(
 				Float.parseFloat(t[2]),
 				Float.parseFloat(t[3]),
 				Float.parseFloat(t[4]));
-			ghostManager.updateGhostAvatar(ghostID, pos);
+			// Optional rotation quaternion (fields 5-8) + isMoving flag (field 9)
+			if (t.length >= 10)
+			{	Quaternionf q = new Quaternionf(
+					Float.parseFloat(t[5]),
+					Float.parseFloat(t[6]),
+					Float.parseFloat(t[7]),
+					Float.parseFloat(t[8]));
+				Matrix4f rotation = new Matrix4f().rotation(q);
+				boolean isMoving = t[9].equals("1");
+				ghostManager.updateGhostAvatar(ghostID, pos, rotation, isMoving);
+			}
+			else
+			{	ghostManager.updateGhostAvatar(ghostID, pos);
+			}
 		}
 
 		// ---- createNPC / mnpc ----
@@ -189,14 +215,16 @@ public class ProtocolClient extends GameConnectionClient
 
 	/**
 	 * Announces this client's avatar to the server.
-	 * format: create,localId,x,y,z,modelName,textureName
+	 * format: create,localId,x,y,z,modelName,textureName,qx,qy,qz,qw
 	 */
 	public void sendCreateMessage(Vector3f pos, String modelName, String textureName)
 	{	try
-		{	String msg = "create," + id.toString()
+		{	Quaternionf q = new Quaternionf().setFromUnnormalized(game.getAvatarRotation());
+			String msg = "create," + id.toString()
 				+ "," + pos.x() + "," + pos.y() + "," + pos.z()
 				+ "," + modelName
-				+ "," + textureName;
+				+ "," + textureName
+				+ "," + q.x() + "," + q.y() + "," + q.z() + "," + q.w();
 			sendPacket(msg);
 		}
 		catch (IOException e) { e.printStackTrace(); }
@@ -204,25 +232,30 @@ public class ProtocolClient extends GameConnectionClient
 
 	/**
 	 * Responds to a wants-details request.
-	 * format: dsfr,localId,remoteId,x,y,z,modelName,textureName
+	 * format: dsfr,localId,remoteId,x,y,z,modelName,textureName,qx,qy,qz,qw
 	 */
 	public void sendDetailsForMessage(UUID remoteID, Vector3f pos)
 	{	try
-		{	String msg = "dsfr," + id.toString()
+		{	Quaternionf q = new Quaternionf().setFromUnnormalized(game.getAvatarRotation());
+			String msg = "dsfr," + id.toString()
 				+ "," + remoteID.toString()
 				+ "," + pos.x() + "," + pos.y() + "," + pos.z()
 				+ "," + game.getAvatarModelName()
-				+ "," + game.getAvatarTextureName();
+				+ "," + game.getAvatarTextureName()
+				+ "," + q.x() + "," + q.y() + "," + q.z() + "," + q.w();
 			sendPacket(msg);
 		}
 		catch (IOException e) { e.printStackTrace(); }
 	}
 
-	/** format: move,localId,x,y,z */
-	public void sendMoveMessage(Vector3f pos)
+	/** format: move,localId,x,y,z,qx,qy,qz,qw,isMoving */
+	public void sendMoveMessage(Vector3f pos, Matrix4f rotation, boolean isMoving)
 	{	try
-		{	String msg = "move," + id.toString()
-				+ "," + pos.x() + "," + pos.y() + "," + pos.z();
+		{	Quaternionf q = new Quaternionf().setFromUnnormalized(rotation);
+			String msg = "move," + id.toString()
+				+ "," + pos.x() + "," + pos.y() + "," + pos.z()
+				+ "," + q.x() + "," + q.y() + "," + q.z() + "," + q.w()
+				+ "," + (isMoving ? 1 : 0);
 			sendPacket(msg);
 		}
 		catch (IOException e) { e.printStackTrace(); }

@@ -45,14 +45,16 @@ public class GameServerUDP extends GameConnectionServer<UUID>
 		}
 
 		// ------------------------------------------------------------------
-		// CREATE  –  format: create,localId,x,y,z,modelName,textureName
+		// CREATE  –  format: create,localId,x,y,z,modelName,textureName[,qx,qy,qz,qw]
 		// ------------------------------------------------------------------
 		if (msgTokens[0].compareTo("create") == 0)
 		{
 			if (msgTokens.length >= 7)
 			{	UUID clientID = UUID.fromString(msgTokens[1]);
-				String[] details = { msgTokens[2], msgTokens[3], msgTokens[4],
-				                     msgTokens[5], msgTokens[6] };
+				// Collect ALL fields after the sender ID so rotation tokens are preserved.
+				String[] details = new String[msgTokens.length - 2];
+				for (int i = 2; i < msgTokens.length; i++)
+					details[i - 2] = msgTokens[i];
 				sendCreateMessages(clientID, details);
 				sendWantsDetailsMessages(clientID);
 			}
@@ -80,28 +82,33 @@ public class GameServerUDP extends GameConnectionServer<UUID>
 
 		// ------------------------------------------------------------------
 		// DETAILS-FOR (dsfr)
-		// format: dsfr,localId,remoteId,x,y,z,modelName,textureName
+		// format: dsfr,localId,remoteId,x,y,z,modelName,textureName[,qx,qy,qz,qw]
 		// ------------------------------------------------------------------
 		if (msgTokens[0].compareTo("dsfr") == 0)
 		{
 			if (msgTokens.length >= 8)
 			{	UUID senderID = UUID.fromString(msgTokens[1]);
 				UUID remoteID = UUID.fromString(msgTokens[2]);
-				String[] details = { msgTokens[3], msgTokens[4], msgTokens[5],
-				                     msgTokens[6], msgTokens[7] };
+				// Collect ALL fields after remoteId so rotation tokens are preserved.
+				String[] details = new String[msgTokens.length - 3];
+				for (int i = 3; i < msgTokens.length; i++)
+					details[i - 3] = msgTokens[i];
 				sendDetailsForMessage(senderID, remoteID, details);
 			}
 		}
 
 		// ------------------------------------------------------------------
-		// MOVE  –  format: move,localId,x,y,z
+		// MOVE  –  format: move,localId,x,y,z[,qx,qy,qz,qw,isMoving]
 		// ------------------------------------------------------------------
 		if (msgTokens[0].compareTo("move") == 0)
 		{
 			if (msgTokens.length >= 5)
 			{	UUID clientID = UUID.fromString(msgTokens[1]);
-				String[] position = { msgTokens[2], msgTokens[3], msgTokens[4] };
-				sendMoveMessages(clientID, position);
+				// Collect ALL fields after the sender ID so rotation and isMoving are preserved.
+				String[] data = new String[msgTokens.length - 2];
+				for (int i = 2; i < msgTokens.length; i++)
+					data[i - 2] = msgTokens[i];
+				sendMoveMessages(clientID, data);
 			}
 		}
 	}
@@ -121,19 +128,13 @@ public class GameServerUDP extends GameConnectionServer<UUID>
 
 	/**
 	 * Forwards the CREATE message to all OTHER clients.
-	 * format: create,remoteId,x,y,z,modelName,textureName
+	 * format: create,remoteId,x,y,z,modelName,textureName[,qx,qy,qz,qw]
 	 */
 	public void sendCreateMessages(UUID clientID, String[] details)
 	{	try
-		{	String msg = "create," + clientID.toString()
-				+ "," + details[0]
-				+ "," + details[1]
-				+ "," + details[2]
-				+ "," + details[3]
-				+ "," + details[4];
-			if (details.length >= 6)
-				msg += "," + details[5];
-			forwardPacketToAll(msg, clientID);
+		{	StringBuilder msg = new StringBuilder("create,").append(clientID.toString());
+			for (String d : details) msg.append(',').append(d);
+			forwardPacketToAll(msg.toString(), clientID);
 		}
 		catch (IOException e) { e.printStackTrace(); }
 	}
@@ -154,34 +155,26 @@ public class GameServerUDP extends GameConnectionServer<UUID>
 	/**
 	 * Sends a DETAILS-FOR packet to the target client (remoteID) telling them
 	 * what senderID looks like and where they are.
-	 * format: dsfr,senderId,x,y,z,modelName,textureName
+	 * format: dsfr,senderId,x,y,z,modelName,textureName[,qx,qy,qz,qw]
 	 */
 	public void sendDetailsForMessage(UUID senderID, UUID remoteID, String[] details)
 	{	try
-		{	String msg = "dsfr," + senderID.toString()
-				+ "," + details[0]
-				+ "," + details[1]
-				+ "," + details[2]
-				+ "," + details[3]
-				+ "," + details[4];
-			if (details.length >= 6)
-				msg += "," + details[5];
-			sendPacket(msg, remoteID);
+		{	StringBuilder msg = new StringBuilder("dsfr,").append(senderID.toString());
+			for (String d : details) msg.append(',').append(d);
+			sendPacket(msg.toString(), remoteID);
 		}
 		catch (IOException e) { e.printStackTrace(); }
 	}
 
 	/**
 	 * Forwards a MOVE update to all clients except the mover.
-	 * format: move,remoteId,x,y,z
+	 * format: move,remoteId,x,y,z[,qx,qy,qz,qw,isMoving]
 	 */
-	public void sendMoveMessages(UUID clientID, String[] position)
+	public void sendMoveMessages(UUID clientID, String[] data)
 	{	try
-		{	String msg = "move," + clientID.toString()
-				+ "," + position[0]
-				+ "," + position[1]
-				+ "," + position[2];
-			forwardPacketToAll(msg, clientID);
+		{	StringBuilder msg = new StringBuilder("move,").append(clientID.toString());
+			for (String d : data) msg.append(',').append(d);
+			forwardPacketToAll(msg.toString(), clientID);
 		}
 		catch (IOException e) { e.printStackTrace(); }
 	}

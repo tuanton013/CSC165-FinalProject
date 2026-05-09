@@ -38,6 +38,6 @@ public class MoveAction extends AbstractInputAction
 		av.setLocalLocation(newPosition);
 
 		if (protClient != null && game.getIsConnected())
-			protClient.sendMoveMessage(av.getWorldLocation());
+			protClient.sendMoveMessage(av.getWorldLocation(), av.getWorldRotation(), true);
 	}
 }

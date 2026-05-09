@@ -117,6 +117,13 @@ public class MyGame extends VariableFrameRateGame
 	// Animated shape for the robot (newHuman.obj slot)
 	private AnimatedShape robotShape;
 
+	// Ghost animated-shape pools – one separate instance per remote player slot
+	private static final int GHOST_POOL_SIZE = 6;
+	private AnimatedShape[] ghostHumanShapes = new AnimatedShape[GHOST_POOL_SIZE];
+	private AnimatedShape[] ghostRobotShapes = new AnimatedShape[GHOST_POOL_SIZE];
+	private int ghostHumanPoolIdx = 0;
+	private int ghostRobotPoolIdx = 0;
+
 	// The avatar choices made at startup
 	private String avatarModelName;
 	private String avatarTextureName;
@@ -237,6 +244,17 @@ public class MyGame extends VariableFrameRateGame
 
 		// NPC mesh used by networked AI ghost
 		npcShape = new ImportedModel("kir.obj");
+
+		// Pre-load per-ghost animated shapes so each remote player gets
+		// its own independent AnimatedShape instance (VBOs are set up here,
+		// before init() runs, so late creation is not needed).
+		for (int i = 0; i < GHOST_POOL_SIZE; i++)
+		{	ghostHumanShapes[i] = new AnimatedShape("HumanFinal.rkm", "HumanFinal.rks");
+			ghostHumanShapes[i].loadAnimation("WALK", "HumanFinal.rka");
+			ghostRobotShapes[i] = new AnimatedShape("robot.rkm", "robot.rks");
+			ghostRobotShapes[i].loadAnimation("WALK", "robotWalk.rka");
+			ghostRobotShapes[i].loadAnimation("IDLE", "robotIdle.rka");
+		}
 	}
 
 	@Override
@@ -461,6 +479,9 @@ public class MyGame extends VariableFrameRateGame
 		// Update skeleton animation for robot model
 		if (robotShape != null && "newHuman.obj".equals(avatarModelName))
 			robotShape.updateAnimation();
+
+		// Advance skeletal animations for all ghost avatars
+		gm.updateAllAnimations();
 
 		// Footstep sound: play while moving, stop when stationary
 		Vector3f currentAvatarLoc = new Vector3f(avatar.getWorldLocation());
@@ -716,12 +737,12 @@ public class MyGame extends VariableFrameRateGame
 		// A/D: rotate avatar left/right (used for outdoor exploration)
 		im.associateActionWithAllKeyboards(
 				Key.A,
-				new TurnAction(this, +1f),
+				new TurnAction(this, protClient, +1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
 
 		im.associateActionWithAllKeyboards(
 				Key.D,
-				new TurnAction(this, -1f),
+				new TurnAction(this, protClient, -1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
 	}
 
@@ -787,6 +808,9 @@ public class MyGame extends VariableFrameRateGame
 			case KeyEvent.VK_S:
 				if (humanShape != null && "HumanFinal".equals(avatarModelName))
 					humanShape.stopAnimation();
+				// Notify other clients that this player has stopped moving
+				if (protClient != null && isClientConnected)
+					protClient.sendMoveMessage(avatar.getWorldLocation(), avatar.getWorldRotation(), false);
 				break;
 		}
 		super.keyReleased(e);
@@ -810,6 +834,25 @@ public class MyGame extends VariableFrameRateGame
 
 	public void    setIsConnected(boolean b)   { isClientConnected = b; }
 	public boolean getIsConnected()            { return isClientConnected; }
+
+	/** Returns the avatar's current world-space rotation matrix. */
+	public Matrix4f getAvatarRotation()        { return avatar.getWorldRotation(); }
+
+	/** Returns the next available pre-loaded HumanFinal animated shape for a ghost. */
+	public AnimatedShape getNextGhostHumanShape()
+	{	if (ghostHumanPoolIdx < GHOST_POOL_SIZE)
+			return ghostHumanShapes[ghostHumanPoolIdx++];
+		System.out.println("[MyGame] Warning: ghost HumanFinal pool exhausted, reusing slot 0");
+		return ghostHumanShapes[0];
+	}
+
+	/** Returns the next available pre-loaded robot animated shape for a ghost. */
+	public AnimatedShape getNextGhostRobotShape()
+	{	if (ghostRobotPoolIdx < GHOST_POOL_SIZE)
+			return ghostRobotShapes[ghostRobotPoolIdx++];
+		System.out.println("[MyGame] Warning: ghost robot pool exhausted, reusing slot 0");
+		return ghostRobotShapes[0];
+	}
 
 	/** Returns (loading if necessary) the ObjShape for the given filename. */
 	public ObjShape getGhostShape(String modelName)
