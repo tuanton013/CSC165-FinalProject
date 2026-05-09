@@ -46,6 +46,11 @@ public class MyGame extends VariableFrameRateGame
 
 	private IAudioManager audioMgr;
 	private Sound backgroundSound, footstepSound, victorySound;
+	private Sound npcAlertSound;
+	private boolean wasInDangerZone = false;
+	private float dangerSpeedMultiplier = 1.0f;
+	private static final float NPC_DANGER_RADIUS = 1.2f;
+	private static final float NPC_DANGER_SLOWDOWN = 0.4f;
 	private Vector3f lastAvatarLocation = new Vector3f();
 	private boolean isFootstepPlaying = false;
 	private static final float FOOTSTEP_MOVEMENT_THRESHOLD = 0.001f;
@@ -266,7 +271,14 @@ public class MyGame extends VariableFrameRateGame
 		victorySound.setMaxDistance(80.0f);
 		victorySound.setMinDistance(5.0f);
 		victorySound.setRollOff(1.0f);
-		System.out.println("[MyGame] All 3 sounds loaded successfully");
+		// NPC alert — 3D positional
+		AudioResource resAlert = audioMgr.createAudioResource("npcAlert.wav", AudioResourceType.AUDIO_SAMPLE);
+		npcAlertSound = new Sound(resAlert, SoundType.SOUND_EFFECT, 40, false);
+		npcAlertSound.initialize(audioMgr);
+		npcAlertSound.setMaxDistance(15.0f);
+		npcAlertSound.setMinDistance(1.0f);
+		npcAlertSound.setRollOff(2.0f);
+		System.out.println("[MyGame] All 4 sounds loaded successfully");
 	}
 
 	public void setEarParameters()
@@ -471,6 +483,22 @@ public class MyGame extends VariableFrameRateGame
 			}
 		}
 		footstepSound.setLocation(currentAvatarLoc);
+
+		// NPC danger zone
+		GhostNPC ghostNPC = (protClient != null) ? protClient.getGhostNPC() : null;
+		boolean isInDangerZone = false;
+		if (ghostNPC != null && !isOutdoor)
+		{	float distToNPC = currentAvatarLoc.distance(ghostNPC.getWorldLocation());
+			isInDangerZone = (distToNPC < NPC_DANGER_RADIUS);
+		}
+		if (isInDangerZone && !wasInDangerZone)
+		{	// entered the zone — play warning sound at NPC's location
+			npcAlertSound.setLocation(ghostNPC.getWorldLocation());
+			npcAlertSound.play();
+		}
+		dangerSpeedMultiplier = isInDangerZone ? NPC_DANGER_SLOWDOWN : 1.0f;
+		wasInDangerZone = isInDangerZone;
+
 		lastAvatarLocation.set(currentAvatarLoc);
 	}
 
@@ -770,6 +798,7 @@ public class MyGame extends VariableFrameRateGame
 
 	public GameObject   getAvatar()            { return avatar; }
 	public Engine       getEngine()            { return engine; }
+	public float        getDangerSpeedMultiplier() { return dangerSpeedMultiplier; }
 	public GhostManager getGhostManager()      { return gm; }
 	public Vector3f     getPlayerPosition()    { return avatar.getWorldLocation(); }
 	public String       getAvatarModelName()   { return avatarModelName; }
