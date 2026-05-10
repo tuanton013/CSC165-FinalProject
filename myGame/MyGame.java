@@ -104,6 +104,10 @@ public class MyGame extends VariableFrameRateGame
 	private boolean pendingOutdoorTransition = false;
 	private boolean allowUnwalkablePath = false;
 
+	// Win / lose state
+	private boolean gameEnded = false;
+	private boolean localPlayerWon = false;
+
 	// Available assets (add more as you expand the project)
 	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj", "kir.obj", "newHuman.obj" };
 	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg", "human.png", "new_character_texture.png" };
@@ -423,15 +427,23 @@ public class MyGame extends VariableFrameRateGame
 		currFrameTime = System.currentTimeMillis();
 		if (!paused) elapsTime += (currFrameTime - lastFrameTime) / 1000.0;
 
-		String modeText = isOutdoor ? "OUTDOOR" : "MAZE";
-		String freeWalkText = allowUnwalkablePath ? "ON" : "OFF";
-		(engine.getHUDmanager()).setHUD1(
-				"Mode: " + modeText + "  Time: " + Math.round((float) elapsTime)
-				+ "s  FreeWalk(8): " + freeWalkText,
-				isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
-		(engine.getHUDmanager()).setHUD2(
-				"W/S Move  A/D Turn  7 Teleport End  8 Toggle FreeWalk  P PhysicsViz  6 ForceExit  2/3 Wire  1 Pause  ESC Quit",
-				new Vector3f(1, 1, 1), 15, 35);
+		if (gameEnded)
+		{	String endMsg  = localPlayerWon ? "YOU WIN!" : "YOU LOSE";
+			Vector3f color = localPlayerWon ? new Vector3f(0, 1, 0) : new Vector3f(1, 0.2f, 0.2f);
+			(engine.getHUDmanager()).setHUD1(endMsg, color, 700, 500);
+			(engine.getHUDmanager()).setHUD2("", new Vector3f(1, 1, 1), 15, 35);
+		}
+		else
+		{	String modeText = isOutdoor ? "OUTDOOR" : "MAZE";
+			String freeWalkText = allowUnwalkablePath ? "ON" : "OFF";
+			(engine.getHUDmanager()).setHUD1(
+					"Mode: " + modeText + "  Time: " + Math.round((float) elapsTime)
+					+ "s  FreeWalk(8): " + freeWalkText,
+					isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
+			(engine.getHUDmanager()).setHUD2(
+					"W/S Move  A/D Turn  7 Teleport End  8 Toggle FreeWalk  P PhysicsViz  6 ForceExit  2/3 Wire  1 Pause  ESC Quit",
+					new Vector3f(1, 1, 1), 15, 35);
+		}
 
 		// Poll input devices so MoveAction etc. fire
 		engine.getInputManager().update((float) elapsTime);
@@ -671,9 +683,16 @@ public class MyGame extends VariableFrameRateGame
 	// Outdoor transition
 	// ------------------------------------------------------------------
 
-	/** Called once when the avatar crosses the maze exit threshold. */
+	/**
+	 * Called once when this player crosses the maze exit first (winner path).
+	 * Sets outdoor mode, plays victory sound, and notifies other players.
+	 */
 	private void transitionToOutdoor()
-	{	victorySound.setLocation(avatar.getWorldLocation());
+	{	if (gameEnded) return;   // prevent double-fire
+		gameEnded = true;
+		localPlayerWon = true;
+
+		victorySound.setLocation(avatar.getWorldLocation());
 		victorySound.play();
 		System.out.println("[MyGame] Victory sound triggered");
 		isOutdoor = true;
@@ -686,11 +705,30 @@ public class MyGame extends VariableFrameRateGame
 		float snapYOffset = "newHuman.obj".equals(avatarModelName) ? ROBOT_VISUAL_Y_OFFSET : 0.0f;
 		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, terrain.getHeight(MAZE_CENTER_X, snapZ) + snapYOffset, snapZ));
 
-		(engine.getHUDmanager()).setHUD1(
-			"You escaped! Explore outside (W/S = move, A/D = turn)",
-			new Vector3f(0, 1, 0), 15, 15);
+		// Notify other networked players that this client won
+		if (protClient != null && isClientConnected)
+			protClient.sendWinMessage();
 
-		System.out.println("[MyGame] Player exited the maze – outdoor mode active.");
+		System.out.println("[MyGame] Player exited the maze – outdoor mode active (YOU WIN).");
+	}
+
+	/**
+	 * Called when another player has won.
+	 * Teleports this player outside and marks the game as lost.
+	 */
+	public void handleLose()
+	{	if (gameEnded) return;
+		gameEnded = true;
+		localPlayerWon = false;
+		isOutdoor = true;
+
+		maze.getRenderStates().disableRendering();
+
+		float snapZ = MAZE_EXIT_Z - 2f;
+		float snapYOffset = "newHuman.obj".equals(avatarModelName) ? ROBOT_VISUAL_Y_OFFSET : 0.0f;
+		avatar.setLocalLocation(new Vector3f(MAZE_CENTER_X, terrain.getHeight(MAZE_CENTER_X, snapZ) + snapYOffset, snapZ));
+
+		System.out.println("[MyGame] Another player won – teleported outside (YOU LOSE).");
 	}
 
 	/** Third-person follow camera used throughout gameplay. */

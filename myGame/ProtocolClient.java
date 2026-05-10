@@ -149,6 +149,10 @@ public class ProtocolClient extends GameConnectionClient
 			updateGhostNPC(npcPos, size);
 		}
 
+		// ---- lose – another player won; teleport this client outside ----
+		if (t[0].compareTo("lose") == 0)
+			game.handleLose();
+
 		// ---- isnr ----
 		if (t[0].compareTo("isnr") == 0 && t.length >= 5)
 		{	Vector3f npcPos = new Vector3f(
@@ -257,6 +261,14 @@ public class ProtocolClient extends GameConnectionClient
 				+ "," + q.x() + "," + q.y() + "," + q.z() + "," + q.w()
 				+ "," + (isMoving ? 1 : 0);
 			sendPacket(msg);
+		}
+		catch (IOException e) { e.printStackTrace(); }
+	}
+
+	/** format: win,localId */
+	public void sendWinMessage()
+	{	try
+		{	sendPacket("win," + id.toString());
 		}
 		catch (IOException e) { e.printStackTrace(); }
 	}

@@ -111,6 +111,16 @@ public class GameServerUDP extends GameConnectionServer<UUID>
 				sendMoveMessages(clientID, data);
 			}
 		}
+
+		// ------------------------------------------------------------------
+		// WIN  –  format: win,localId
+		// Broadcast "lose,winnerId" to every other client.
+		// ------------------------------------------------------------------
+		if (msgTokens[0].compareTo("win") == 0 && msgTokens.length >= 2)
+		{
+			UUID winnerID = UUID.fromString(msgTokens[1]);
+			sendLoseMessages(winnerID);
+		}
 	}
 
 	// -----------------------------------------------------------------------
@@ -187,6 +197,18 @@ public class GameServerUDP extends GameConnectionServer<UUID>
 	{	try
 		{	String msg = "bye," + clientID.toString();
 			forwardPacketToAll(msg, clientID);
+		}
+		catch (IOException e) { e.printStackTrace(); }
+	}
+
+	/**
+	 * Broadcasts "lose,winnerId" to every client except the winner.
+	 * Called when the server receives a "win" packet.
+	 */
+	public void sendLoseMessages(UUID winnerID)
+	{	try
+		{	String msg = "lose," + winnerID.toString();
+			forwardPacketToAll(msg, winnerID);
 		}
 		catch (IOException e) { e.printStackTrace(); }
 	}
