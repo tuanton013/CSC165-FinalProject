@@ -56,6 +56,7 @@ public class MyGame extends VariableFrameRateGame
 	private static final float FOOTSTEP_MOVEMENT_THRESHOLD = 0.001f;
 
 	private GameObject   avatar;
+	private GameObject   avatarMarker;
 	private GameObject   terrain;
 	private GameObject   maze;
 	private TerrainPlane terrainShape;
@@ -337,6 +338,17 @@ public class MyGame extends VariableFrameRateGame
 			avatar.setLocalTranslation(new Matrix4f().translation(MAZE_CENTER_X, startY, MAZE_START_Z));
 			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
+
+		// Hierarchical scenegraph example: marker is parented to avatar and
+		// follows its transforms via explicit propagation settings.
+		avatarMarker = new GameObject(avatar, new Sphere(), textureCache.get("ice.jpg"));
+		avatarMarker.setLocalScale(new Matrix4f().scaling(0.05f));
+		avatarMarker.setLocalLocation(new Vector3f(-0.32f, 1.20f, 0.08f));
+		avatarMarker.propagateTranslation(true);
+		avatarMarker.propagateRotation(true);
+		avatarMarker.propagateScale(false);
+		avatarMarker.applyParentRotationToPosition(true);
+		avatarMarker.applyParentScaleToPosition(false);
 	}
 
 	@Override
