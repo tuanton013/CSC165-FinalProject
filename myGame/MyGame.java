@@ -109,8 +109,8 @@ public class MyGame extends VariableFrameRateGame
 	private boolean localPlayerWon = false;
 
 	// Available assets (add more as you expand the project)
-	private static final String[] MODEL_NAMES   = { "HumanFinal", "dolphinHighPoly.obj", "kir.obj", "newHuman.obj" };
-	private static final String[] TEXTURE_NAMES = { "Dolphin_HighPolyUV.jpg", "ice.jpg", "brick1.jpg", "human.png", "new_character_texture.png" };
+	private static final String[] MODEL_NAMES   = { "HumanFinal", "newHuman.obj" };
+	private static final String[] TEXTURE_NAMES = { "human.png", "new_character_texture.png" };
 
 	// Shared asset caches so ghosts re-use already-loaded resources
 	private Map<String, ObjShape>     shapeCache   = new HashMap<>();
