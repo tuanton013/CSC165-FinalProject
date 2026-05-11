@@ -64,6 +64,8 @@ public class MyGame extends VariableFrameRateGame
 	private ObjShape     npcShape;
 	private TextureImage npcTex;
 	private Light        light1;
+	private Light        light2;   // positional – maze-exit guide light (always on)
+	private Light        light3;   // red spotlight – NPC danger zone warning (on/off)
 
 	// Maze geometry constants (from maze.obj bounding box)
 	// The maze is shifted +9 in Z so it sits in front of the camera.
@@ -366,9 +368,35 @@ public class MyGame extends VariableFrameRateGame
 	@Override
 	public void initializeLights()
 	{	Light.setGlobalAmbient(0.5f, 0.5f, 0.5f);
+
+		// Light 1 – general positional light; its brightness pulses each update cycle
 		light1 = new Light();
 		light1.setLocation(new Vector3f(5.0f, 4.0f, 2.0f));
+		light1.setAmbient(0.3f, 0.3f, 0.3f);
+		light1.setDiffuse(0.8f, 0.8f, 0.8f);
+		light1.setSpecular(1.0f, 1.0f, 1.0f);
 		(engine.getSceneGraph()).addLight(light1);
+
+		// Light 2 – positional guide light hovering over the maze exit (always on)
+		light2 = new Light();
+		light2.setLocation(new Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y + 2.0f, MAZE_EXIT_Z));
+		light2.setAmbient(0.1f, 0.3f, 0.1f);
+		light2.setDiffuse(0.2f, 0.9f, 0.2f);
+		light2.setSpecular(0.5f, 1.0f, 0.5f);
+		(engine.getSceneGraph()).addLight(light2);
+
+		// Light 3 – red spotlight that turns ON when the NPC danger zone activates
+		light3 = new Light();
+		light3.setType(Light.LightType.SPOTLIGHT);
+		light3.setLocation(new Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y + 3.0f, MAZE_CENTER_Z));
+		light3.setDirection(new Vector3f(0.0f, -1.0f, 0.0f));
+		light3.setCutoffAngle(25.0f);
+		light3.setOffAxisExponent(8.0f);
+		light3.setAmbient(0.4f, 0.0f, 0.0f);
+		light3.setDiffuse(1.0f, 0.0f, 0.0f);
+		light3.setSpecular(1.0f, 0.2f, 0.2f);
+		light3.disable();  // starts OFF – turned on by the NPC danger zone
+		(engine.getSceneGraph()).addLight(light3);
 	}
 
 	@Override
@@ -537,9 +565,14 @@ public class MyGame extends VariableFrameRateGame
 			isInDangerZone = (distToNPC < NPC_DANGER_RADIUS);
 		}
 		if (isInDangerZone && !wasInDangerZone)
-		{	// entered the zone — play warning sound at NPC's location
+		{	// entered the zone — play warning sound and turn on red danger spotlight
 			npcAlertSound.setLocation(ghostNPC.getWorldLocation());
 			npcAlertSound.play();
+			light3.enable();
+		}
+		else if (!isInDangerZone && wasInDangerZone)
+		{	// left the zone — extinguish the red danger spotlight
+			light3.disable();
 		}
 		dangerSpeedMultiplier = isInDangerZone ? NPC_DANGER_SLOWDOWN : 1.0f;
 		wasInDangerZone = isInDangerZone;
