@@ -608,25 +608,9 @@ public class MyGame extends VariableFrameRateGame
 		// Lighting: every 5-second cycle the scene gradually fades to black,
 		// then snaps back to full brightness and repeats.
 		// cyclePos goes 0→5 within each cycle; brightness goes 1→0.
-		double cyclePos = elapsTime % 5.0;
-		float brightness;
-		float emergencyLvl;
+		double cyclePos  = elapsTime % 5.0;
+		float  brightness = 1.0f - (float)(cyclePos / 5.0);
 
-		if (cyclePos < 4.0)
-		{   // Phase 1: primary dims, emergency stays FULL 
-			brightness   = 1.0f - (float)(cyclePos / 4.0);
-			emergencyLvl = 1.0f;
-		}
-		else if (cyclePos < 4.7)
-		{   // Phase 2: PITCH BLACK everything off
-			brightness   = 0.0f;
-			emergencyLvl = 0.0f;
-		}
-		else
-		{   // Phase 3: primary off, emergency stays FULL
-			brightness   = 0.0f;
-			emergencyLvl = 1.0f;
-		}
 
 		Light.setGlobalAmbient(0.5f * brightness, 0.5f * brightness, 0.5f * brightness);
 
@@ -634,13 +618,6 @@ public class MyGame extends VariableFrameRateGame
 		light1.setDiffuse (0.8f * brightness, 0.8f * brightness, 0.8f * brightness);
 		light1.setSpecular(       brightness,        brightness,        brightness);
 
-		light2.setAmbient (0.2f * emergencyLvl, 0.2f * emergencyLvl, 0.3f * emergencyLvl);
-		light2.setDiffuse (0.6f * emergencyLvl, 0.6f * emergencyLvl, 1.0f * emergencyLvl);
-		light2.setSpecular(0.8f * emergencyLvl, 0.8f * emergencyLvl, 1.0f * emergencyLvl);
-
-		light3.setAmbient (0.3f * emergencyLvl, 0.25f * emergencyLvl, 0.15f * emergencyLvl);
-		light3.setDiffuse (1.0f * emergencyLvl, 0.85f * emergencyLvl, 0.5f  * emergencyLvl);
-		light3.setSpecular(1.0f * emergencyLvl, 0.9f  * emergencyLvl, 0.6f  * emergencyLvl);
 	}
 
 	// ------------------------------------------------------------------
