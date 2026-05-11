@@ -1,6 +1,8 @@
 package myGame;
 
 import tage.input.action.AbstractInputAction;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 import net.java.games.input.Event;
 import org.joml.*;
 
@@ -25,13 +27,15 @@ public class MoveAction extends AbstractInputAction
 
 	@Override
 	public void performAction(float time, Event e)
-	{	var av          = game.getAvatar();
+	{	float value = e.getValue();
+		if (java.lang.Math.abs(value) < 0.1f) return;
+		var av          = game.getAvatar();
 		// Snapshot the pre-move position as a NEW vector – JOML's add() mutates in place,
 		// so we must not reuse the same object for both oldPosition and newPosition.
 		Vector3f oldPosition = new Vector3f(av.getWorldLocation());
 		var moveDir = new Vector4f(0f, 0f, 1f, 1f);
 		moveDir.mul(av.getWorldRotation());
-		moveDir.mul(direction * 0.01f * getSpeed() * game.getDangerSpeedMultiplier());
+		moveDir.mul(direction * value * 0.01f * getSpeed() * game.getDangerSpeedMultiplier());
 		// Build proposed position in a fresh vector, leaving oldPosition untouched
 		Vector3f newPosition = new Vector3f(oldPosition)
 				.add(moveDir.x(), moveDir.y(), moveDir.z());

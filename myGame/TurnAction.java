@@ -1,6 +1,7 @@
 package myGame;
 
 import tage.input.action.AbstractInputAction;
+import org.joml.Matrix4f;
 import net.java.games.input.Event;
 import org.joml.*;
 
@@ -23,8 +24,10 @@ public class TurnAction extends AbstractInputAction
 
 	@Override
 	public void performAction(float time, Event e)
-	{	var av    = game.getAvatar();
-		float yaw = direction * 0.02f * getSpeed();
+	{	float value = e.getValue();
+		if (java.lang.Math.abs(value) < 0.1f) return;
+		var av    = game.getAvatar();
+		float yaw = direction * value * 0.02f * getSpeed();
 		av.setLocalRotation(new Matrix4f().rotationY(yaw).mul(av.getWorldRotation()));
 
 		// Broadcast updated position + rotation so remote ghosts face the correct direction
