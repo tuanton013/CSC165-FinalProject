@@ -9,10 +9,9 @@ import tage.input.action.*;
 import tage.networking.IGameConnection.ProtocolType;
 import tage.physics.PhysicsEngine;
 import tage.physics.PhysicsObject;
-import tage.rml.Matrix4f;
-import tage.rml.Vector3f;
 import net.java.games.input.Component.Identifier.Axis;
 import net.java.games.input.Component.Identifier.Key;
+import net.java.games.input.Component.Identifier.Button;
 
 import java.lang.Math;
 import java.awt.*;
@@ -43,8 +42,9 @@ public class MyGame extends VariableFrameRateGame
 	// ------------------------------------------------------------------
 	private static Engine engine;
 
-	private boolean paused        = false;
-	private boolean musicEnabled  = true;
+	private boolean paused            = false;
+	private boolean musicEnabled      = true;
+	private boolean wireframeEnabled  = false;
 	private double  lastFrameTime, currFrameTime, elapsTime;
 
 	private IAudioManager audioMgr;
@@ -68,7 +68,7 @@ public class MyGame extends VariableFrameRateGame
 	private ObjShape     npcShape;
 	private ObjShape     orbShape;
 	private TextureImage npcTex;
-	private Light        light1;
+	private Light        light1, light2, light3;
 	private TextureImage orbTex;
 	// Maze geometry constants (from maze.obj bounding box)
 	// The maze is shifted +9 in Z so it sits in front of the camera.
@@ -496,7 +496,8 @@ public class MyGame extends VariableFrameRateGame
 				+ "  Music(M): " + (musicEnabled ? "ON" : "OFF"),
 				isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
 		(engine.getHUDmanager()).setHUD2(
-				"W/S Move  A/D Turn  7 Teleport End  8 Toggle FreeWalk  P PhysicsViz  M Music  6 ForceExit  2/3 Wire  1 Pause  ESC Quit",
+				"KB: W/S Move  A/D Turn  8 FreeWalk  P Physics  M Music  2/3 Wire  1 Pause  ESC Quit"
+				+ "   GP: A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
 				new Vector3f(1, 1, 1), 15, 35);
 
 		// Poll input devices so MoveAction etc. fire
@@ -842,6 +843,36 @@ public class MyGame extends VariableFrameRateGame
 	}
 
 	// ------------------------------------------------------------------
+	// Toggle helpers (called by keyPressed and gamepad button actions)
+	// ------------------------------------------------------------------
+
+	public void togglePause()
+	{	paused = !paused;
+	}
+
+	public void toggleMusic()
+	{	musicEnabled = !musicEnabled;
+		if (musicEnabled) backgroundSound.resume();
+		else              backgroundSound.pause();
+	}
+
+	public void toggleWireframe()
+	{	wireframeEnabled = !wireframeEnabled;
+		avatar.getRenderStates().setWireframe(wireframeEnabled);
+	}
+
+	public void togglePhysicsViz()
+	{	physicsVizEnabled = !physicsVizEnabled;
+		if (physicsVizEnabled) engine.enablePhysicsWorldRender();
+		else                   engine.disablePhysicsWorldRender();
+	}
+
+	public void toggleFreeWalk()
+	{	allowUnwalkablePath = !allowUnwalkablePath;
+		System.out.println("[MyGame] Unwalkable-path restriction: " + (allowUnwalkablePath ? "OFF" : "ON"));
+	}
+
+	// ------------------------------------------------------------------
 	// Input
 	// ------------------------------------------------------------------
 
@@ -874,11 +905,37 @@ public class MyGame extends VariableFrameRateGame
 				new MoveAction(this, protClient, -1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
 
-		// Gamepad: X axis 
+		// Gamepad: X axis
 		im.associateActionWithAllGamepads(
 				Axis.X,
 				new TurnAction(this, protClient, -1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		// Gamepad buttons (A=0 B=1 X=2 Y=3 LB=4)
+		im.associateActionWithAllGamepads(
+				Button._0,
+				new TogglePauseAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
+
+		im.associateActionWithAllGamepads(
+				Button._1,
+				new ToggleMusicAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
+
+		im.associateActionWithAllGamepads(
+				Button._2,
+				new ToggleWireframeAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
+
+		im.associateActionWithAllGamepads(
+				Button._3,
+				new TogglePhysicsAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
+
+		im.associateActionWithAllGamepads(
+				Button._4,
+				new ToggleFreeWalkAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
 	}
 
 	@Override
@@ -892,12 +949,14 @@ public class MyGame extends VariableFrameRateGame
 				}
 				break;
 			case KeyEvent.VK_1:
-				paused = !paused;
+				togglePause();
 				break;
 			case KeyEvent.VK_2:
+				wireframeEnabled = true;
 				avatar.getRenderStates().setWireframe(true);
 				break;
 			case KeyEvent.VK_3:
+				wireframeEnabled = false;
 				avatar.getRenderStates().setWireframe(false);
 				break;
 			case KeyEvent.VK_4:
@@ -917,22 +976,13 @@ public class MyGame extends VariableFrameRateGame
 					teleportToMazeEnd();
 				break;
 			case KeyEvent.VK_8:
-				allowUnwalkablePath = !allowUnwalkablePath;
-				System.out.println("[MyGame] Unwalkable-path restriction: " + (allowUnwalkablePath ? "OFF" : "ON"));
+				toggleFreeWalk();
 				break;
 			case KeyEvent.VK_P:
-				physicsVizEnabled = !physicsVizEnabled;
-				if (physicsVizEnabled)
-					engine.enablePhysicsWorldRender();
-				else
-					engine.disablePhysicsWorldRender();
+				togglePhysicsViz();
 				break;
 			case KeyEvent.VK_M:
-				musicEnabled = !musicEnabled;
-				if (musicEnabled)
-					backgroundSound.resume();
-				else
-					backgroundSound.pause();
+				toggleMusic();
 				break;
 			case KeyEvent.VK_ESCAPE:
 				if (protClient != null && isClientConnected)
