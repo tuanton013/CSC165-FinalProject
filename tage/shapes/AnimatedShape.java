@@ -68,6 +68,7 @@ public final class AnimatedShape extends ObjShape
 	private int curAnimEndTypeTotal = -1;  // how many times to loop (0 for forever)
 	private int curAnimEndTypeCount = 0;   // how many time have we looped
 	private boolean curAnimPaused = false;
+	private long lastAnimUpdateNanos = System.nanoTime();
 
 	// Current Skeleton Pose Skinning Matrices.
 	// This array holds a list of 4x4 matrices.
@@ -468,8 +469,15 @@ public final class AnimatedShape extends ObjShape
 	//====================================================
 
 	private void update()
-	{	if (curAnimation != null && !curAnimPaused && curAnimSpeed != 0.0f)
-		{	curLerpedAnimFrame += curAnimSpeed;
+	{	long nowNanos = System.nanoTime();
+		float deltaSeconds = (nowNanos - lastAnimUpdateNanos) * 1.0e-9f;
+		lastAnimUpdateNanos = nowNanos;
+		if (deltaSeconds < 0.0f) deltaSeconds = 0.0f;
+		if (deltaSeconds > 0.25f) deltaSeconds = 0.25f;
+
+		if (curAnimation != null && !curAnimPaused && curAnimSpeed != 0.0f)
+		{	float deltaFramesAt60Hz = deltaSeconds * 60.0f;
+			curLerpedAnimFrame += curAnimSpeed * deltaFramesAt60Hz;
 			curAnimFrame = java.lang.Math.round(curLerpedAnimFrame);
 
 			// Check if the animation is over
@@ -588,6 +596,7 @@ public final class AnimatedShape extends ObjShape
 
 		// Play the anim
 		curAnimPaused = false;
+		lastAnimUpdateNanos = System.nanoTime();
 	}
 
 	/** freezes a running animation at the last frame displayed */
@@ -603,6 +612,7 @@ public final class AnimatedShape extends ObjShape
 		curAnimSpeed = 1.0f;
 		curAnimEndTypeCount = 0;
 		curAnimEndTypeTotal = 0;
+		lastAnimUpdateNanos = System.nanoTime();
 	}
 
 	// ---------- OTHER UTILITY FUNCTIONS ----------------

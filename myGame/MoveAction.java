@@ -16,6 +16,7 @@ public class MoveAction extends AbstractInputAction
 	private MyGame         game;
 	private ProtocolClient protClient;
 	private float          direction;   // +1 = forward, -1 = backward
+	private static final float MOVE_SPEED_UNITS_PER_SEC = 3f;
 
 	public MoveAction(MyGame game, ProtocolClient protClient, float direction)
 	{	this.game       = game;
@@ -26,12 +27,15 @@ public class MoveAction extends AbstractInputAction
 	@Override
 	public void performAction(float time, Event e)
 	{	var av          = game.getAvatar();
+		float deltaSeconds = time;
+		if (deltaSeconds < 0.0f) deltaSeconds = 0.0f;
+		if (deltaSeconds > 0.1f) deltaSeconds = 0.1f;
 		// Snapshot the pre-move position as a NEW vector – JOML's add() mutates in place,
 		// so we must not reuse the same object for both oldPosition and newPosition.
 		Vector3f oldPosition = new Vector3f(av.getWorldLocation());
 		var moveDir = new Vector4f(0f, 0f, 1f, 1f);
 		moveDir.mul(av.getWorldRotation());
-		moveDir.mul(direction * 0.01f * getSpeed() * game.getDangerSpeedMultiplier());
+		moveDir.mul(direction * MOVE_SPEED_UNITS_PER_SEC * deltaSeconds * getSpeed() * game.getDangerSpeedMultiplier());
 		// Build proposed position in a fresh vector, leaving oldPosition untouched
 		Vector3f newPosition = new Vector3f(oldPosition)
 				.add(moveDir.x(), moveDir.y(), moveDir.z());
