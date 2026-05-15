@@ -963,7 +963,7 @@ public class MyGame extends VariableFrameRateGame
 				new ZoomCameraAction(cameraOrbit, +1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
 
-		// Gamepad right stick: orbit (Z axis) and elevate (RZ axis)
+		// Gamepad right stick: orbit (Z axis) and elevate (RZ or RY axis depending on controller)
 		im.associateActionWithAllGamepads(
 				Axis.Z,
 				new OrbitCameraAction(cameraOrbit, -1f),
@@ -971,6 +971,11 @@ public class MyGame extends VariableFrameRateGame
 
 		im.associateActionWithAllGamepads(
 				Axis.RZ,
+				new ElevateCameraAction(cameraOrbit, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		im.associateActionWithAllGamepads(
+				Axis.RY,
 				new ElevateCameraAction(cameraOrbit, -1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
 
