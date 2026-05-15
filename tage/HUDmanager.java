@@ -28,11 +28,12 @@ public class HUDmanager
 	private GLUT glut = new GLUT();
 	private Engine engine;
 
-	private String HUD1string, HUD2string;
-	private float[] HUD1color, HUD2color;
+	private String HUD1string, HUD2string, HUD3string;
+	private float[] HUD1color, HUD2color, HUD3color;
 	private int HUD1font = GLUT.BITMAP_TIMES_ROMAN_24;
-	private int HUD2font = GLUT.BITMAP_TIMES_ROMAN_24;
-	private int HUD1x, HUD1y, HUD2x, HUD2y;
+	private int HUD2font = GLUT.BITMAP_HELVETICA_12;
+	private int HUD3font = GLUT.BITMAP_HELVETICA_12;
+	private int HUD1x, HUD1y, HUD2x, HUD2y, HUD3x, HUD3y;
 
 	// The constructor is called by the engine, and should not be called by the game application.
 	// It initializes the two HUDs to empty strings.
@@ -41,8 +42,10 @@ public class HUDmanager
 	{	engine = e;
 		HUD1string = "";
 		HUD2string = "";
+		HUD3string = "";
 		HUD1color = new float[3];
 		HUD2color = new float[3];
+		HUD3color = new float[3];
 	}
 	
 	protected void setGLcanvas(GLCanvas g) { myCanvas = g; }
@@ -60,6 +63,10 @@ public class HUDmanager
 		gl4bc.glColor3f(HUD2color[0], HUD2color[1], HUD2color[2]);
 		gl4bc.glWindowPos2d (HUD2x, HUD2y);
 		glut.glutBitmapString (HUD2font, HUD2string);
+
+		gl4bc.glColor3f(HUD3color[0], HUD3color[1], HUD3color[2]);
+		gl4bc.glWindowPos2d (HUD3x, HUD3y);
+		glut.glutBitmapString (HUD3font, HUD3string);
 	}
 
 	/** sets HUD #1 to the specified text string, color, and location */
@@ -78,9 +85,20 @@ public class HUDmanager
 		HUD2y = y;
 	}
 
+	/** sets HUD #3 to the specified text string, color, and location */
+	public void setHUD3(String string, Vector3f color, int x, int y)
+	{	HUD3string = string;
+		HUD3color[0]=color.x(); HUD3color[1]=color.y(); HUD3color[2]=color.z();
+		HUD3x = x;
+		HUD3y = y;
+	}
+
 	/** sets HUD #1 font - available fonts are listed above. */
 	public void setHUD1font(int font) { HUD1font = font; }
 
 	/** sets HUD #2 font - available fonts are listed above. */
 	public void setHUD2font(int font) { HUD2font = font; }
+
+	/** sets HUD #3 font - available fonts are listed above. */
+	public void setHUD3font(int font) { HUD3font = font; }
 }

@@ -493,20 +493,29 @@ public class MyGame extends VariableFrameRateGame
 		{	String endMsg  = localPlayerWon ? "YOU WIN!" : "YOU LOSE";
 			Vector3f color = localPlayerWon ? new Vector3f(0, 1, 0) : new Vector3f(1, 0.2f, 0.2f);
 			(engine.getHUDmanager()).setHUD1(endMsg, color, 700, 500);
-			(engine.getHUDmanager()).setHUD2("", new Vector3f(1, 1, 1), 15, 35);
+			(engine.getHUDmanager()).setHUD2("", new Vector3f(1, 1, 1), 15, 38);
+			(engine.getHUDmanager()).setHUD3("", new Vector3f(1, 1, 1), 960, 38);
 		}
 		else
 		{	String modeText = isOutdoor ? "OUTDOOR" : "MAZE";
 			String freeWalkText = allowUnwalkablePath ? "ON" : "OFF";
 			(engine.getHUDmanager()).setHUD1(
-					"Mode: " + modeText + "  Time: " + Math.round((float) elapsTime)
-					+ "s  FreeWalk(8): " + freeWalkText
-					+ "  Music(M): " + (musicEnabled ? "ON" : "OFF"),
+					"Mode: " + modeText
+					+ "   Time: " + Math.round((float) elapsTime) + "s"
+					+ "   FreeWalk: " + freeWalkText
+					+ "   Music: " + (musicEnabled ? "ON" : "OFF"),
 					isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
+
+			// Keyboard controls – left side, light yellow
 			(engine.getHUDmanager()).setHUD2(
-					"W/S=Move  A/D=Turn  Arrows=Orbit/Elevate  [/]=Zoom  8=FreeWalk  P=Physics  M=Music  1=Pause  ESC=Quit"
-					+ "   GP: LeftStick=Move/Turn  RightStick=Orbit/Elevate  A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
-					new Vector3f(1, 1, 1), 15, 35);
+					"[KEYBOARD]  W/S=Move  A/D=Turn  LR-Arrows=Orbit  UD-Arrows=Elevate"
+					+ "  [/]=Zoom  2=WireON  3=WireOFF  8=FreeWalk  M=Music  P=Physics  1=Pause  ESC=Quit",
+					new Vector3f(1f, 1f, 0.6f), 15, 38);
+
+			// Gamepad controls – right side, light cyan
+			(engine.getHUDmanager()).setHUD3(
+					"       [GAMEPAD]  LS=Move/Turn  RS=Orbit/Elevate  A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
+					new Vector3f(0.6f, 1f, 1f), 960, 38);
 		}
 
 		// Poll input devices so MoveAction etc. fire
