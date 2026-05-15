@@ -17,6 +17,7 @@ public class GhostAvatar extends GameObject
 	private AnimatedShape animShape;
 	private boolean wasMoving = false;
 	private String modelName;
+	private static final float GHOST_WALK_ANIM_SPEED = 0.85f;
 
 	public GhostAvatar(UUID id, ObjShape shape, TextureImage texture, Vector3f position)
 	{	super(GameObject.root(), shape, texture);
@@ -50,7 +51,7 @@ public class GhostAvatar extends GameObject
 	{	if (animShape == null) return;
 		if (isMoving && !wasMoving)
 		{	animShape.stopAnimation();
-			animShape.playAnimation("WALK", 0.25f, EndType.LOOP, 0);
+			animShape.playAnimation("WALK", GHOST_WALK_ANIM_SPEED, EndType.LOOP, 0);
 		}
 		else if (!isMoving && wasMoving)
 		{	animShape.stopAnimation();

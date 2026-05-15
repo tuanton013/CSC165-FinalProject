@@ -46,6 +46,7 @@ public class MyGame extends VariableFrameRateGame
 	private boolean musicEnabled      = true;
 	private boolean wireframeEnabled  = false;
 	private double  lastFrameTime, currFrameTime, elapsTime;
+	private float   frameDeltaSeconds;
 
 	private IAudioManager audioMgr;
 	private Sound backgroundSound, footstepSound, victorySound;
@@ -54,6 +55,8 @@ public class MyGame extends VariableFrameRateGame
 	private float dangerSpeedMultiplier = 1.0f;
 	private static final float NPC_DANGER_RADIUS = 1.2f;
 	private static final float NPC_DANGER_SLOWDOWN = 0.4f;
+	private static final float HUMAN_WALK_ANIM_SPEED = 0.75f;
+	private static final float ROBOT_WALK_ANIM_SPEED = 0.85f;
 	private Vector3f lastAvatarLocation = new Vector3f();
 	private boolean isFootstepPlaying = false;
 	private static final float FOOTSTEP_MOVEMENT_THRESHOLD = 0.001f;
@@ -276,7 +279,8 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.put(name, new TextureImage(name));
 			textureCache.put("gridTerrain.jpg",   new TextureImage("gridTerrain.jpg"));
 			textureCache.put("trainHeightMap.jpg", new TextureImage("trainHeightMap.jpg"));
-			textureCache.put("sciFiPanel.jpg", new TextureImage("sciFiPanel.jpg"));
+			textureCache.put("brick1.jpg", new TextureImage("brick1.jpg"));
+			textureCache.put("ice.jpg", new TextureImage("ice.jpg"));
 		npcTex = textureCache.get("ice.jpg");
 		orbTex = textureCache.get(avatarTextureName);
 	}
@@ -438,6 +442,7 @@ public class MyGame extends VariableFrameRateGame
 	{	lastFrameTime = System.currentTimeMillis();
 		currFrameTime = System.currentTimeMillis();
 		elapsTime     = 0.0;
+		frameDeltaSeconds = 0.0f;
 
 		(engine.getRenderSystem()).setWindowDimensions(1900, 1000);
 		// Start in third-person follow mode
@@ -469,7 +474,8 @@ public class MyGame extends VariableFrameRateGame
 	public void update()
 	{	lastFrameTime = currFrameTime;
 		currFrameTime = System.currentTimeMillis();
-		if (!paused) elapsTime += (currFrameTime - lastFrameTime) / 1000.0;
+		frameDeltaSeconds = paused ? 0.0f : (float)((currFrameTime - lastFrameTime) / 1000.0);
+		if (!paused) elapsTime += frameDeltaSeconds;
 
 		if (gameEnded)
 		{	String endMsg  = localPlayerWon ? "YOU WIN!" : "YOU LOSE";
@@ -501,7 +507,7 @@ public class MyGame extends VariableFrameRateGame
 				new Vector3f(1, 1, 1), 15, 35);
 
 		// Poll input devices so MoveAction etc. fire
-		engine.getInputManager().update((float) elapsTime);
+		engine.getInputManager().update(frameDeltaSeconds);
 
 		// Step the physics simulation and detect collisions after movement updates.
 		PhysicsEngine pe = engine.getSceneGraph().getPhysicsEngine();
@@ -511,7 +517,7 @@ public class MyGame extends VariableFrameRateGame
 					avatar.getWorldLocation(),
 					new org.joml.Quaternionf(0f, 0f, 0f, 1f));
 		}
-		pe.update((float)(currFrameTime - lastFrameTime) / 1000f);
+		pe.update(frameDeltaSeconds);
 		pe.detectCollisions();
 
 		// Update skeleton animation if the HumanFinal model is the active avatar
@@ -571,7 +577,7 @@ public class MyGame extends VariableFrameRateGame
 			isFootstepPlaying = true;
 			if (robotShape != null && "newHuman.obj".equals(avatarModelName))
 			{	robotShape.stopAnimation();
-				robotShape.playAnimation("WALK", 0.25f, EndType.LOOP, 0);
+				robotShape.playAnimation("WALK", ROBOT_WALK_ANIM_SPEED, EndType.LOOP, 0);
 			}
 		}
 		else if (!isMoving && isFootstepPlaying)
@@ -945,7 +951,7 @@ public class MyGame extends VariableFrameRateGame
 			case KeyEvent.VK_S:
 				if (humanShape != null && "HumanFinal".equals(avatarModelName))
 				{	humanShape.stopAnimation();
-					humanShape.playAnimation("WALK", 0.15f, EndType.LOOP, 0);
+					humanShape.playAnimation("WALK", HUMAN_WALK_ANIM_SPEED, EndType.LOOP, 0);
 				}
 				break;
 			case KeyEvent.VK_1:
