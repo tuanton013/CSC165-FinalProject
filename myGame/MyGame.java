@@ -514,7 +514,7 @@ public class MyGame extends VariableFrameRateGame
 
 			// Gamepad controls – right side, light cyan
 			(engine.getHUDmanager()).setHUD3(
-					"       [GAMEPAD]  LS=Move/Turn  RS=Orbit/Elevate  A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
+					"       [GAMEPAD]  LS=Move/Turn  RS=Orbit/Elevate  A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk RS=Elevate",
 					new Vector3f(0.6f, 1f, 1f), 960, 38);
 		}
 
