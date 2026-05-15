@@ -1,6 +1,7 @@
 package myGame;
 
 import tage.*;
+import tage.CameraOrbit3D;
 import tage.audio.*;
 import tage.shapes.*;
 import tage.shapes.AnimatedShape.EndType;
@@ -115,6 +116,9 @@ public class MyGame extends VariableFrameRateGame
 	private boolean isOutdoor = false;
 	private boolean pendingOutdoorTransition = false;
 	private boolean allowUnwalkablePath = false;
+
+	// 3rd-person orbit camera
+	private CameraOrbit3D cameraOrbit;
 
 	// Win / lose state
 	private boolean gameEnded = false;
@@ -450,8 +454,11 @@ public class MyGame extends VariableFrameRateGame
 		frameDeltaSeconds = 0.0f;
 
 		(engine.getRenderSystem()).setWindowDimensions(1900, 1000);
-		// Start in third-person follow mode
-		updateThirdPersonCamera();
+		// Initialize the 3rd-person orbit camera (azimuth=0 = directly behind avatar)
+		Camera cam = (engine.getRenderSystem()).getViewport("MAIN").getCamera();
+		cameraOrbit = new CameraOrbit3D(cam, 0.0f, 0.736f, 7.43f);
+		cameraOrbit.setLookHeightOffset(3.2f);
+		cameraOrbit.updateCameraPosition(avatar);
 
 		// Networking (only when a server address was supplied)
 		if (serverAddress != null)
@@ -497,8 +504,8 @@ public class MyGame extends VariableFrameRateGame
 					+ "  Music(M): " + (musicEnabled ? "ON" : "OFF"),
 					isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
 			(engine.getHUDmanager()).setHUD2(
-					"KB: W/S Move  A/D Turn  8 FreeWalk  P Physics  M Music  2/3 Wire  1 Pause  ESC Quit"
-					+ "   GP: A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
+					"W/S=Move  A/D=Turn  Arrows=Orbit/Elevate  [/]=Zoom  8=FreeWalk  P=Physics  M=Music  1=Pause  ESC=Quit"
+					+ "   GP: LeftStick=Move/Turn  RightStick=Orbit/Elevate  A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
 					new Vector3f(1, 1, 1), 15, 35);
 		}
 
@@ -549,8 +556,8 @@ public class MyGame extends VariableFrameRateGame
 		if (!isOutdoor && !allowUnwalkablePath && isOnMazePath(avatar.getWorldLocation().x(), avatar.getWorldLocation().z()) == false)
 			respawnAvatar();
 
-		// Third-person follow camera (maze and outdoor)
-		updateThirdPersonCamera();
+		// Third-person orbit camera – maintains azimuth/elevation/distance each frame
+		cameraOrbit.updateCameraPosition(avatar);
 
 		processNetworking((float) elapsTime);
 
@@ -913,6 +920,49 @@ public class MyGame extends VariableFrameRateGame
 		im.associateActionWithAllGamepads(
 				Axis.X,
 				new TurnAction(this, protClient, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		// Keyboard: arrow keys – orbit and elevate the camera (avatar heading unchanged)
+		im.associateActionWithAllKeyboards(
+				Key.LEFT,
+				new OrbitCameraAction(cameraOrbit, +1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		im.associateActionWithAllKeyboards(
+				Key.RIGHT,
+				new OrbitCameraAction(cameraOrbit, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		im.associateActionWithAllKeyboards(
+				Key.UP,
+				new ElevateCameraAction(cameraOrbit, +1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		im.associateActionWithAllKeyboards(
+				Key.DOWN,
+				new ElevateCameraAction(cameraOrbit, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		// Keyboard: [ / ] for zoom in / out
+		im.associateActionWithAllKeyboards(
+				Key.LBRACKET,
+				new ZoomCameraAction(cameraOrbit, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		im.associateActionWithAllKeyboards(
+				Key.RBRACKET,
+				new ZoomCameraAction(cameraOrbit, +1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		// Gamepad right stick: orbit (Z axis) and elevate (RZ axis)
+		im.associateActionWithAllGamepads(
+				Axis.Z,
+				new OrbitCameraAction(cameraOrbit, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		im.associateActionWithAllGamepads(
+				Axis.RZ,
+				new ElevateCameraAction(cameraOrbit, -1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
 
 		// Gamepad buttons (A=0 B=1 X=2 Y=3 LB=4)
