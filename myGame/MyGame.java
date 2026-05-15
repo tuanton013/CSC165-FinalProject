@@ -345,7 +345,7 @@ public class MyGame extends VariableFrameRateGame
 		terrain.getRenderStates().setTileFactor(10);
 
 		// Maze
-		maze = new GameObject(GameObject.root(), mazeShape, textureCache.get("sciFiPanel.jpg"));
+		maze = new GameObject(GameObject.root(), mazeShape, textureCache.get("brick1.jpg"));
 		maze.setLocalTranslation(new Matrix4f().translation(0f, MAZE_FLOOR_Y, MAZE_OFFSET_Z));
 		maze.setLocalScale(new Matrix4f().scaling(1.0f));
 
@@ -488,23 +488,14 @@ public class MyGame extends VariableFrameRateGame
 			String freeWalkText = allowUnwalkablePath ? "ON" : "OFF";
 			(engine.getHUDmanager()).setHUD1(
 					"Mode: " + modeText + "  Time: " + Math.round((float) elapsTime)
-					+ "s  FreeWalk(8): " + freeWalkText,
+					+ "s  FreeWalk(8): " + freeWalkText
+					+ "  Music(M): " + (musicEnabled ? "ON" : "OFF"),
 					isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
 			(engine.getHUDmanager()).setHUD2(
-					"W/S Move  A/D Turn  7 Teleport End  8 Toggle FreeWalk  P PhysicsViz  6 ForceExit  2/3 Wire  1 Pause  ESC Quit",
+					"KB: W/S Move  A/D Turn  8 FreeWalk  P Physics  M Music  2/3 Wire  1 Pause  ESC Quit"
+					+ "   GP: A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
 					new Vector3f(1, 1, 1), 15, 35);
 		}
-		String modeText = isOutdoor ? "OUTDOOR" : "MAZE";
-		String freeWalkText = allowUnwalkablePath ? "ON" : "OFF";
-		(engine.getHUDmanager()).setHUD1(
-				"Mode: " + modeText + "  Time: " + Math.round((float) elapsTime)
-				+ "s  FreeWalk(8): " + freeWalkText
-				+ "  Music(M): " + (musicEnabled ? "ON" : "OFF"),
-				isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
-		(engine.getHUDmanager()).setHUD2(
-				"KB: W/S Move  A/D Turn  8 FreeWalk  P Physics  M Music  2/3 Wire  1 Pause  ESC Quit"
-				+ "   GP: A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
-				new Vector3f(1, 1, 1), 15, 35);
 
 		// Poll input devices so MoveAction etc. fire
 		engine.getInputManager().update(frameDeltaSeconds);
