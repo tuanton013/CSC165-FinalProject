@@ -285,8 +285,9 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.put("trainHeightMap.jpg", new TextureImage("trainHeightMap.jpg"));
 			textureCache.put("brick1.jpg", new TextureImage("brick1.jpg"));
 			textureCache.put("ice.jpg", new TextureImage("ice.jpg"));
-		npcTex = textureCache.get("ice.jpg");
-		orbTex = textureCache.get(avatarTextureName);
+			textureCache.put("sciFiPanel.jpg", new TextureImage("sciFiPanel.jpg"));
+			npcTex = textureCache.get("ice.jpg");
+			orbTex = textureCache.get(avatarTextureName);
 	}
 
 	@Override
@@ -349,7 +350,7 @@ public class MyGame extends VariableFrameRateGame
 		terrain.getRenderStates().setTileFactor(10);
 
 		// Maze
-		maze = new GameObject(GameObject.root(), mazeShape, textureCache.get("brick1.jpg"));
+		maze = new GameObject(GameObject.root(), mazeShape, textureCache.get("sciFiPanel.jpg"));
 		maze.setLocalTranslation(new Matrix4f().translation(0f, MAZE_FLOOR_Y, MAZE_OFFSET_Z));
 		maze.setLocalScale(new Matrix4f().scaling(1.0f));
 
@@ -757,6 +758,7 @@ public class MyGame extends VariableFrameRateGame
 		gameEnded = true;
 		localPlayerWon = true;
 
+		exitBeaconSound.stop();
 		victorySound.setLocation(avatar.getWorldLocation());
 		victorySound.play();
 		System.out.println("[MyGame] Victory sound triggered");
@@ -787,6 +789,7 @@ public class MyGame extends VariableFrameRateGame
 		localPlayerWon = false;
 		isOutdoor = true;
 
+		exitBeaconSound.stop();
 		maze.getRenderStates().disableRendering();
 
 		float snapZ = MAZE_EXIT_Z - 2f;
