@@ -61,6 +61,10 @@ public class MyGame extends VariableFrameRateGame
 	private boolean isFootstepPlaying = false;
 	private static final float FOOTSTEP_MOVEMENT_THRESHOLD = 0.001f;
 
+	// Gamepad state tracking for animations
+	public boolean isGamepadMoving = false;
+	private static final float GAMEPAD_AXIS_THRESHOLD = 0.1f;  // deadzone threshold
+
 	private GameObject   avatar;
 	private GameObject   avatarMarker;
 	private GameObject   terrain;
@@ -997,6 +1001,10 @@ public class MyGame extends VariableFrameRateGame
 			case KeyEvent.VK_S:
 				if (humanShape != null && "HumanFinal".equals(avatarModelName))
 					humanShape.stopAnimation();
+				else if (robotShape != null && "newHuman.obj".equals(avatarModelName))
+				{	robotShape.stopAnimation();
+					robotShape.playAnimation("IDLE", ROBOT_WALK_ANIM_SPEED, EndType.LOOP, 0);
+				}
 				// Notify other clients that this player has stopped moving
 				if (protClient != null && isClientConnected)
 					protClient.sendMoveMessage(avatar.getWorldLocation(), avatar.getWorldRotation(), false);
@@ -1016,6 +1024,14 @@ public class MyGame extends VariableFrameRateGame
 	public Vector3f     getPlayerPosition()    { return avatar.getWorldLocation(); }
 	public String       getAvatarModelName()   { return avatarModelName; }
 	public String       getAvatarTextureName() { return avatarTextureName; }
+	/** Returns the human animated shape. */
+	public AnimatedShape getHumanShape()       { return humanShape; }
+	/** Returns the robot animated shape. */
+	public AnimatedShape getRobotShape()       { return robotShape; }
+	/** Returns the human walk animation speed constant. */
+	public float getHumanWalkAnimSpeed()       { return HUMAN_WALK_ANIM_SPEED; }
+	/** Returns the robot walk animation speed constant. */
+	public float getRobotWalkAnimSpeed()       { return ROBOT_WALK_ANIM_SPEED; }
 	/** Returns the mesh used for the networked NPC proxy object. */
 	public ObjShape     getNPCshape()          { return npcShape; }
 	/** Returns the texture used for the networked NPC proxy object. */
