@@ -83,6 +83,16 @@ public class GhostManager
 		if ("newHuman.obj".equals(modelName) && ghostAnim != null)
 			ghostAnim.playAnimation("IDLE", 0.2f, tage.shapes.AnimatedShape.EndType.LOOP, 0);
 
+		// Hierarchical scenegraph 
+		// all remote avatars have a matching orb above them.
+		GameObject ghostOrb = new GameObject(ghost, game.getOrbShape(), texture);
+		ghostOrb.setLocalScale(new Matrix4f().scaling(0.1f));
+		float orbY = "HumanFinal".equals(ghost.getModelName()) ? 2.0f : 1.7f;
+		ghostOrb.setLocalTranslation(new Matrix4f().translation(0f, orbY, 0f));
+		ghostOrb.propagateTranslation(true);
+		ghostOrb.propagateRotation(false);
+		ghostOrb.propagateScale(false);
+
 		ghostAvatars.add(ghost);
 		System.out.println("Ghost created for " + id);
 	}

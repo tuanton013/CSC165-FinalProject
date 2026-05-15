@@ -9,8 +9,9 @@ import tage.input.action.*;
 import tage.networking.IGameConnection.ProtocolType;
 import tage.physics.PhysicsEngine;
 import tage.physics.PhysicsObject;
-
+import net.java.games.input.Component.Identifier.Axis;
 import net.java.games.input.Component.Identifier.Key;
+import net.java.games.input.Component.Identifier.Button;
 
 import java.lang.Math;
 import java.awt.*;
@@ -41,13 +42,15 @@ public class MyGame extends VariableFrameRateGame
 	// ------------------------------------------------------------------
 	private static Engine engine;
 
-	private boolean paused = false;
+	private boolean paused            = false;
+	private boolean musicEnabled      = true;
+	private boolean wireframeEnabled  = false;
 	private double  lastFrameTime, currFrameTime, elapsTime;
 	private float   frameDeltaSeconds;
 
 	private IAudioManager audioMgr;
 	private Sound backgroundSound, footstepSound, victorySound;
-	private Sound npcAlertSound;
+	private Sound npcAlertSound, exitBeaconSound;
 	private boolean wasInDangerZone = false;
 	private float dangerSpeedMultiplier = 1.0f;
 	private static final float NPC_DANGER_RADIUS = 1.2f;
@@ -62,14 +65,14 @@ public class MyGame extends VariableFrameRateGame
 	private GameObject   avatarMarker;
 	private GameObject   terrain;
 	private GameObject   maze;
+	private GameObject   statusOrb;
 	private TerrainPlane terrainShape;
 	private ObjShape     mazeShape;
 	private ObjShape     npcShape;
+	private ObjShape     orbShape;
 	private TextureImage npcTex;
-	private Light        light1;
-	private Light        light2;   // positional – maze-exit guide light (always on)
-	private Light        light3;   // red spotlight – NPC danger zone warning (on/off)
-
+	private Light        light1, light2, light3;
+	private TextureImage orbTex;
 	// Maze geometry constants (from maze.obj bounding box)
 	// The maze is shifted +9 in Z so it sits in front of the camera.
 	private static final float MAZE_CENTER_X  =  0.16f;   // (xMin+xMax)/2
@@ -265,6 +268,9 @@ public class MyGame extends VariableFrameRateGame
 			ghostRobotShapes[i].loadAnimation("WALK", "robotWalk.rka");
 			ghostRobotShapes[i].loadAnimation("IDLE", "robotIdle.rka");
 		}
+
+		// Status orb – small sphere that is a child of the avatar in the scenegraph
+		orbShape = new tage.shapes.Sphere();
 	}
 
 	@Override
@@ -276,6 +282,7 @@ public class MyGame extends VariableFrameRateGame
 			textureCache.put("brick1.jpg", new TextureImage("brick1.jpg"));
 			textureCache.put("ice.jpg", new TextureImage("ice.jpg"));
 		npcTex = textureCache.get("ice.jpg");
+		orbTex = textureCache.get(avatarTextureName);
 	}
 
 	@Override
@@ -309,6 +316,15 @@ public class MyGame extends VariableFrameRateGame
 		npcAlertSound.setMinDistance(1.0f);
 		npcAlertSound.setRollOff(2.0f);
 		System.out.println("[MyGame] All 4 sounds loaded successfully");
+
+
+		AudioResource resBeacon = audioMgr.createAudioResource("exitBeacon.wav", AudioResourceType.AUDIO_SAMPLE);
+		exitBeaconSound = new Sound(resBeacon, SoundType.SOUND_EFFECT, 100, true);   // looping = true
+		exitBeaconSound.initialize(audioMgr);
+		exitBeaconSound.setMaxDistance(25.0f);   // inaudible beyond 25 units
+		exitBeaconSound.setMinDistance(2.0f);    // full volume within 2 units
+		exitBeaconSound.setRollOff(1.5f);        // steep falloff 
+		exitBeaconSound.setLocation(new Vector3f(MAZE_CENTER_X, MAZE_FLOOR_Y, MAZE_END_TELEPORT_Z));
 	}
 
 	public void setEarParameters()
@@ -329,7 +345,7 @@ public class MyGame extends VariableFrameRateGame
 		terrain.getRenderStates().setTileFactor(10);
 
 		// Maze
-		maze = new GameObject(GameObject.root(), mazeShape, textureCache.get("brick1.jpg"));
+		maze = new GameObject(GameObject.root(), mazeShape, textureCache.get("sciFiPanel.jpg"));
 		maze.setLocalTranslation(new Matrix4f().translation(0f, MAZE_FLOOR_Y, MAZE_OFFSET_Z));
 		maze.setLocalScale(new Matrix4f().scaling(1.0f));
 
@@ -350,16 +366,14 @@ public class MyGame extends VariableFrameRateGame
 			avatar.setLocalRotation(new Matrix4f().rotationY((float)Math.PI));
 		}
 
-		// Hierarchical scenegraph example: marker is parented to avatar and
-		// follows its transforms via explicit propagation settings.
-		avatarMarker = new GameObject(avatar, new Sphere(), textureCache.get("ice.jpg"));
-		avatarMarker.setLocalScale(new Matrix4f().scaling(0.05f));
-		avatarMarker.setLocalLocation(new Vector3f(-0.32f, 1.20f, 0.08f));
-		avatarMarker.propagateTranslation(true);
-		avatarMarker.propagateRotation(true);
-		avatarMarker.propagateScale(false);
-		avatarMarker.applyParentRotationToPosition(true);
-		avatarMarker.applyParentScaleToPosition(false);
+		// Status orb – child of avatar in the scenegraph 
+		statusOrb = new GameObject(avatar, orbShape, orbTex);
+		statusOrb.setLocalScale(new Matrix4f().scaling(0.1f));
+		float orbY = "HumanFinal".equals(avatarModelName) ? 2.0f : 1.7f;
+		statusOrb.setLocalTranslation(new Matrix4f().translation(0f, orbY, 0f));
+		statusOrb.propagateTranslation(true);
+		statusOrb.propagateRotation(false);
+		statusOrb.propagateScale(false);
 	}
 
 	@Override
@@ -447,6 +461,7 @@ public class MyGame extends VariableFrameRateGame
 		setEarParameters();
 		backgroundSound.setLocation(avatar.getWorldLocation());
 		backgroundSound.play();
+		exitBeaconSound.play();   // continuous 3D positional beacon at maze exit
 		System.out.println("[MyGame] Background music started");
 		lastAvatarLocation.set(avatar.getWorldLocation());
 		if (robotShape != null && "newHuman.obj".equals(avatarModelName))
@@ -479,6 +494,17 @@ public class MyGame extends VariableFrameRateGame
 					"W/S Move  A/D Turn  7 Teleport End  8 Toggle FreeWalk  P PhysicsViz  6 ForceExit  2/3 Wire  1 Pause  ESC Quit",
 					new Vector3f(1, 1, 1), 15, 35);
 		}
+		String modeText = isOutdoor ? "OUTDOOR" : "MAZE";
+		String freeWalkText = allowUnwalkablePath ? "ON" : "OFF";
+		(engine.getHUDmanager()).setHUD1(
+				"Mode: " + modeText + "  Time: " + Math.round((float) elapsTime)
+				+ "s  FreeWalk(8): " + freeWalkText
+				+ "  Music(M): " + (musicEnabled ? "ON" : "OFF"),
+				isOutdoor ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0), 15, 15);
+		(engine.getHUDmanager()).setHUD2(
+				"KB: W/S Move  A/D Turn  8 FreeWalk  P Physics  M Music  2/3 Wire  1 Pause  ESC Quit"
+				+ "   GP: A=Pause  B=Music  X=Wire  Y=Physics  LB=FreeWalk",
+				new Vector3f(1, 1, 1), 15, 35);
 
 		// Poll input devices so MoveAction etc. fire
 		engine.getInputManager().update(frameDeltaSeconds);
@@ -591,10 +617,14 @@ public class MyGame extends VariableFrameRateGame
 		// cyclePos goes 0→5 within each cycle; brightness goes 1→0.
 		double cyclePos  = elapsTime % 5.0;
 		float  brightness = 1.0f - (float)(cyclePos / 5.0);
+
+
 		Light.setGlobalAmbient(0.5f * brightness, 0.5f * brightness, 0.5f * brightness);
+
 		light1.setAmbient (0.3f * brightness, 0.3f * brightness, 0.3f * brightness);
 		light1.setDiffuse (0.8f * brightness, 0.8f * brightness, 0.8f * brightness);
 		light1.setSpecular(       brightness,        brightness,        brightness);
+
 	}
 
 	// ------------------------------------------------------------------
@@ -819,6 +849,36 @@ public class MyGame extends VariableFrameRateGame
 	}
 
 	// ------------------------------------------------------------------
+	// Toggle helpers (called by keyPressed and gamepad button actions)
+	// ------------------------------------------------------------------
+
+	public void togglePause()
+	{	paused = !paused;
+	}
+
+	public void toggleMusic()
+	{	musicEnabled = !musicEnabled;
+		if (musicEnabled) backgroundSound.resume();
+		else              backgroundSound.pause();
+	}
+
+	public void toggleWireframe()
+	{	wireframeEnabled = !wireframeEnabled;
+		avatar.getRenderStates().setWireframe(wireframeEnabled);
+	}
+
+	public void togglePhysicsViz()
+	{	physicsVizEnabled = !physicsVizEnabled;
+		if (physicsVizEnabled) engine.enablePhysicsWorldRender();
+		else                   engine.disablePhysicsWorldRender();
+	}
+
+	public void toggleFreeWalk()
+	{	allowUnwalkablePath = !allowUnwalkablePath;
+		System.out.println("[MyGame] Unwalkable-path restriction: " + (allowUnwalkablePath ? "OFF" : "ON"));
+	}
+
+	// ------------------------------------------------------------------
 	// Input
 	// ------------------------------------------------------------------
 
@@ -844,6 +904,44 @@ public class MyGame extends VariableFrameRateGame
 				Key.D,
 				new TurnAction(this, protClient, -1f),
 				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		// Gamepad: Y axis
+		im.associateActionWithAllGamepads(
+				Axis.Y,
+				new MoveAction(this, protClient, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		// Gamepad: X axis
+		im.associateActionWithAllGamepads(
+				Axis.X,
+				new TurnAction(this, protClient, -1f),
+				IInputManager.INPUT_ACTION_TYPE.REPEAT_WHILE_DOWN);
+
+		// Gamepad buttons (A=0 B=1 X=2 Y=3 LB=4)
+		im.associateActionWithAllGamepads(
+				Button._0,
+				new TogglePauseAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
+
+		im.associateActionWithAllGamepads(
+				Button._1,
+				new ToggleMusicAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
+
+		im.associateActionWithAllGamepads(
+				Button._2,
+				new ToggleWireframeAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
+
+		im.associateActionWithAllGamepads(
+				Button._3,
+				new TogglePhysicsAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
+
+		im.associateActionWithAllGamepads(
+				Button._4,
+				new ToggleFreeWalkAction(this),
+				IInputManager.INPUT_ACTION_TYPE.ON_PRESS_ONLY);
 	}
 
 	@Override
@@ -857,12 +955,14 @@ public class MyGame extends VariableFrameRateGame
 				}
 				break;
 			case KeyEvent.VK_1:
-				paused = !paused;
+				togglePause();
 				break;
 			case KeyEvent.VK_2:
+				wireframeEnabled = true;
 				avatar.getRenderStates().setWireframe(true);
 				break;
 			case KeyEvent.VK_3:
+				wireframeEnabled = false;
 				avatar.getRenderStates().setWireframe(false);
 				break;
 			case KeyEvent.VK_4:
@@ -882,15 +982,13 @@ public class MyGame extends VariableFrameRateGame
 					teleportToMazeEnd();
 				break;
 			case KeyEvent.VK_8:
-				allowUnwalkablePath = !allowUnwalkablePath;
-				System.out.println("[MyGame] Unwalkable-path restriction: " + (allowUnwalkablePath ? "OFF" : "ON"));
+				toggleFreeWalk();
 				break;
 			case KeyEvent.VK_P:
-				physicsVizEnabled = !physicsVizEnabled;
-				if (physicsVizEnabled)
-					engine.enablePhysicsWorldRender();
-				else
-					engine.disablePhysicsWorldRender();
+				togglePhysicsViz();
+				break;
+			case KeyEvent.VK_M:
+				toggleMusic();
 				break;
 			case KeyEvent.VK_ESCAPE:
 				if (protClient != null && isClientConnected)
@@ -953,6 +1051,10 @@ public class MyGame extends VariableFrameRateGame
 		System.out.println("[MyGame] Warning: ghost robot pool exhausted, reusing slot 0");
 		return ghostRobotShapes[0];
 	}
+
+	/** Returns the shared orb shape used for the hierarchical-scenegraph nameplate
+	 *  above every avatar (local and remote). */
+	public ObjShape getOrbShape() { return orbShape; }
 
 	/** Returns (loading if necessary) the ObjShape for the given filename. */
 	public ObjShape getGhostShape(String modelName)

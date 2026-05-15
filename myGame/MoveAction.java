@@ -1,6 +1,8 @@
 package myGame;
 
 import tage.input.action.AbstractInputAction;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 import net.java.games.input.Event;
 import org.joml.*;
 
